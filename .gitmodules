@@ -1,4 +1,0 @@
-[submodule "surge"]
-	path = surge
-	url = https://github.com/nkarve/surge.git
-	branch = hotfix-1
