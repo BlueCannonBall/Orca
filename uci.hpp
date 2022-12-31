@@ -11,7 +11,7 @@
 
 namespace uci {
     namespace detail {
-        unsigned int hash(const std::string& s, int pos = 0) { // NOLINT
+        inline unsigned int hash(const std::string& s, int pos = 0) {
             return !s[pos] ? 5381 : (hash(s, pos + 1) * 33) ^ s[pos];
         }
 

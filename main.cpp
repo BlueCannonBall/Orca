@@ -1,21 +1,27 @@
 #include "search.hpp"
 #include "surge/src/position.h"
 #include "surge/src/types.h"
+#include "threadpool.hpp"
 #include "uci.hpp"
 
 class Engine: public uci::Engine {
 protected:
     Position pos;
+    tp::ThreadPool pool;
 
 public:
     Engine() :
-        uci::Engine("orca", "BlueCannonBall") { }
+        uci::Engine("orca", "BlueCannonBall") {
+        Position::set(DEFAULT_FEN, pos);
+    }
 
 protected:
     void on_message(const std::string& command, const std::vector<std::string>& args) override {
         str_switch(command) {
             str_case("position") :
             {
+                Position new_pos;
+                pos = new_pos;
                 if (args[0] == "startpos") {
                     Position::set(DEFAULT_FEN, pos);
                     if (args.size() > 1) {
@@ -88,13 +94,15 @@ protected:
             str_case("go") :
             {
                 Move best_move;
+                int best_move_score;
                 if (pos.turn() == WHITE) {
-                    best_move = find_best_move<WHITE>(pos, 6);
+                    best_move = find_best_move<WHITE>(pos, 6, pool, &best_move_score);
                 } else if (pos.turn() == BLACK) {
-                    best_move = find_best_move<BLACK>(pos, 6);
+                    best_move = find_best_move<BLACK>(pos, 6, pool, &best_move_score);
                 } else {
                     throw std::logic_error("Invalid side to move");
                 }
+                this->send_message("info", {"score", "cp", std::to_string(best_move_score)});
                 this->move(best_move);
                 break;
             }
