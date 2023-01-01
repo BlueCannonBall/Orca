@@ -92,11 +92,10 @@ protected:
             {
                 Move best_move;
                 int best_move_score;
-                std::cout << pos.turn() << std::endl;
                 if (pos.turn() == WHITE) {
-                    best_move = find_best_move<WHITE>(pos, 7, pool, &best_move_score);
+                    best_move = find_best_move<WHITE>(pos, 6, pool, &best_move_score);
                 } else if (pos.turn() == BLACK) {
-                    best_move = find_best_move<BLACK>(pos, 7, pool, &best_move_score);
+                    best_move = find_best_move<BLACK>(pos, 6, pool, &best_move_score);
                 } else {
                     throw std::logic_error("Invalid side to move");
                 }

@@ -27,7 +27,10 @@ template <Color C>
 int evaluate(const Position& pos);
 
 template <Color Us>
-int negamax(Position& pos, int alpha, int beta, unsigned int depth);
+int maxi(Position& pos, int alpha, int beta, unsigned int depth);
+
+template <Color Us>
+int mini(Position& pos, int alpha, int beta, unsigned int depth);
 
 template <Color Us>
 Move find_best_move(Position& pos, unsigned int depth, tp::ThreadPool& pool, int* score);

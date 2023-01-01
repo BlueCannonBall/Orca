@@ -1,4 +1,5 @@
 #include "search.hpp"
+#include <climits>
 #include <cmath>
 
 GameProgress get_progress(int mv1, int mv2) {
@@ -8,7 +9,7 @@ GameProgress get_progress(int mv1, int mv2) {
 template <Color Us>
 int evaluate(const Position& pos) {
     // Material value
-    int mv;
+    int mv = 0;
     int mv_us = 0;
     int mv_them = 0;
     for (size_t i = 0; i < NPIECE_TYPES - 1; i++) {
@@ -17,7 +18,8 @@ int evaluate(const Position& pos) {
     for (size_t i = 0; i < NPIECE_TYPES - 1; i++) {
         mv_them += __builtin_popcountll(pos.bitboard_of(~Us, (PieceType) i)) * piece_values[i];
     }
-    mv = mv_us - mv_them;
+    mv += mv_us;
+    mv -= mv_them;
     GameProgress progress = get_progress(mv_us, mv_them);
 
     // Color advantage
@@ -69,57 +71,83 @@ int evaluate(const Position& pos) {
     kp += king_pcsq_table[Us][__builtin_clzll(pos.bitboard_of(Us, KING))];
     kp -= king_pcsq_table[~Us][__builtin_clzll(pos.bitboard_of(~Us, KING))];
 
-    return std::pow(mv + ca + cc + np + kp, 1.0075);
+    return mv + ca + cc + np + kp;
 }
 
 template <Color Us>
-int negamax(Position& pos, int alpha, int beta, unsigned int depth) {
+int maxi(Position& pos, int alpha, int beta, unsigned int depth) {
     if (depth == 0) {
         return evaluate<Us>(pos);
     }
 
-    int ret;
-    MoveList<Us> children(pos);
-    if (children.size() == 0) {
-        std::cout << depth << std::endl;
-        ret = -piece_values[KING];
-    } else {
-        for (Move child : children) {
-            pos.play<Us>(child);
-            int score = -negamax<~Us>(pos, -beta, -alpha, depth - 1);
-            pos.undo<Us>(child);
-
-            if (score >= beta) {
-                ret = beta;
-                goto cutoff;
-            } else if (score > alpha) {
-                alpha = score;
-            }
+    MoveList<Us> moves(pos);
+    if (moves.empty()) {
+        if (pos.in_check<Us>()) {
+            return -piece_values[KING] - depth;
+        } else {
+            return 0;
         }
-        ret = alpha;
+    }
+    for (Move move : moves) {
+        pos.play<Us>(move);
+        int score = mini<Us>(pos, alpha, beta, depth - 1);
+        pos.undo<Us>(move);
+        if (score >= beta) {
+            return beta;
+        } else if (score > alpha) {
+            alpha = score;
+        }
     }
 
-cutoff:
-    return ret;
+    return alpha;
+}
+
+template <Color Us>
+int mini(Position& pos, int alpha, int beta, unsigned int depth) {
+    if (depth == 0) {
+        return evaluate<Us>(pos);
+    }
+
+    MoveList<~Us> moves(pos);
+    if (moves.empty()) {
+        if (pos.in_check<~Us>()) {
+            return piece_values[KING] + depth;
+        } else {
+            return 0;
+        }
+    }
+    for (Move move : moves) {
+        pos.play<~Us>(move);
+        int score = maxi<Us>(pos, alpha, beta, depth - 1);
+        pos.undo<~Us>(move);
+        if (score <= alpha) {
+            return alpha;
+        } else if (score < beta) {
+            beta = score;
+        }
+    }
+
+    return beta;
 }
 
 template <Color Us>
 Move find_best_move(Position& pos, unsigned int depth, tp::ThreadPool& pool, int* best_move_score_ret) {
-    MoveList<Us> children(pos);
+    MoveList<Us> moves(pos);
 
     Move best_move;
-    int best_move_score = -piece_values[KING];
+    int best_move_score = INT_MIN;
 
     std::mutex mtx;
     std::vector<std::shared_ptr<tp::Task>> tasks;
 
-    for (Move child : children) {
-        tasks.push_back(pool.schedule([pos, depth, child, &best_move, &best_move_score, &mtx](void*) mutable {
-            pos.play<Us>(child);
-            int score = -negamax<~Us>(pos, -piece_values[KING], piece_values[KING], depth - 1);
+    for (Move move : moves) {
+        tasks.push_back(pool.schedule([pos, depth, move, &best_move, &best_move_score, &mtx](void*) mutable {
+            pos.play<Us>(move);
+            int score = mini<Us>(pos, INT_MIN, INT_MAX, depth - 1);
+            pos.undo<Us>(move);
             mtx.lock();
             if (score > best_move_score) {
-                best_move = child;
+                best_move = move;
                 best_move_score = score;
             }
             mtx.unlock();
@@ -137,8 +165,10 @@ Move find_best_move(Position& pos, unsigned int depth, tp::ThreadPool& pool, int
 template int evaluate<WHITE>(const Position& pos);
 template int evaluate<BLACK>(const Position& pos);
 
-template int negamax<WHITE>(Position& pos, int alpha, int beta, unsigned int depth);
-template int negamax<BLACK>(Position& pos, int alpha, int beta, unsigned int depth);
+template int maxi<WHITE>(Position& pos, int alpha, int beta, unsigned int depth);
+template int maxi<BLACK>(Position& pos, int alpha, int beta, unsigned int depth);
+template int mini<WHITE>(Position& pos, int alpha, int beta, unsigned int depth);
+template int mini<BLACK>(Position& pos, int alpha, int beta, unsigned int depth);
 
 template Move find_best_move<WHITE>(Position& pos, unsigned int depth, tp::ThreadPool& pool, int* best_move_score_ret);
 template Move find_best_move<BLACK>(Position& pos, unsigned int depth, tp::ThreadPool& pool, int* best_move_score_ret);
