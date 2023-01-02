@@ -47,8 +47,8 @@ int evaluate(const Position& pos) {
 
     // Knight placement
     int np = 0;
-    np -= pop_count(pos.bitboard_of(Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
-    np += pop_count(pos.bitboard_of(~Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
+    np -= sparse_pop_count(pos.bitboard_of(Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
+    np += sparse_pop_count(pos.bitboard_of(~Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
 
     // King placement
     /*
@@ -72,18 +72,13 @@ int evaluate(const Position& pos) {
     // Pawn placement
     int pp = 0;
     for (int file = AFILE; file < HFILE; file++) {
-        int pawn_count[2] = {0, 0};
-        for (int rank = RANK2; rank < RANK7; rank++) {
-            Piece piece = pos.at(create_square((File) file, (Rank) rank));
-            if (type_of(piece) == PAWN) {
-                pawn_count[color_of(piece)]++;
-            }
+        int pawn_count_us = sparse_pop_count(pos.bitboard_of(Us, PAWN) & MASK_FILE[file]);
+        int pawn_count_them = sparse_pop_count(pos.bitboard_of(~Us, PAWN) & MASK_FILE[file]);
+        if (pawn_count_us > 1) {
+            pp -= (pawn_count_us - 1) * 75;
         }
-        if (pawn_count[Us] > 1) {
-            pp -= (pawn_count[Us] - 1) * 75;
-        }
-        if (pawn_count[~Us] > 1) {
-            pp += (pawn_count[~Us] - 1) * 75;
+        if (pawn_count_them > 1) {
+            pp += (pawn_count_them - 1) * 75;
         }
     }
 
