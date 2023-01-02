@@ -82,13 +82,9 @@ namespace uci {
             }
         }
 
-        void move(Square from, Square to, bool promote = false) {
-            move(Move(from, to), promote);
-        }
-
-        void move(Move move, bool promote = false) {
+        void move(Move move) {
             std::cout << "bestmove " << SQSTR[move.from()] << SQSTR[move.to()];
-            if (promote) {
+            if (move.flags() & PROMOTIONS) {
                 std::cout << "q" << std::endl;
             } else {
                 std::cout << std::endl;
