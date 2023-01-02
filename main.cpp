@@ -92,14 +92,15 @@ protected:
             {
                 Move best_move;
                 int best_move_score;
+                unsigned int best_move_depth;
                 if (pos.turn() == WHITE) {
-                    best_move = find_best_move<WHITE>(pos, 6, pool, &best_move_score);
+                    best_move = find_best_move<WHITE>(pos, std::chrono::seconds(10), 6, pool, &best_move_score, &best_move_depth);
                 } else if (pos.turn() == BLACK) {
-                    best_move = find_best_move<BLACK>(pos, 6, pool, &best_move_score);
+                    best_move = find_best_move<BLACK>(pos, std::chrono::seconds(10), 6, pool, &best_move_score, &best_move_depth);
                 } else {
                     throw std::logic_error("Invalid side to move");
                 }
-                this->send_message("info", {"score", "cp", std::to_string(best_move_score)});
+                this->send_message("info", {"depth", std::to_string(best_move_depth), "score", "cp", std::to_string(best_move_score)});
                 this->move(best_move);
                 break;
             }

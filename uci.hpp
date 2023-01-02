@@ -84,7 +84,7 @@ namespace uci {
 
         void move(Move move) {
             std::cout << "bestmove " << SQSTR[move.from()] << SQSTR[move.to()];
-            if (move.flags() & PROMOTIONS) {
+            if (move.flags() == PR_QUEEN || move.flags() == PC_QUEEN) {
                 std::cout << "q" << std::endl;
             } else {
                 std::cout << std::endl;

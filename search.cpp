@@ -1,4 +1,5 @@
 #include "search.hpp"
+#include <atomic>
 #include <climits>
 #include <cmath>
 
@@ -91,7 +92,7 @@ int evaluate(const Position& pos) {
 }
 
 template <Color Us>
-int maxi(Position& pos, int alpha, int beta, unsigned int depth) {
+int maxi(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop) {
     if (depth == 0) {
         return evaluate<Us>(pos);
     }
@@ -106,9 +107,11 @@ int maxi(Position& pos, int alpha, int beta, unsigned int depth) {
     }
     for (Move move : moves) {
         pos.play<Us>(move);
-        int score = mini<Us>(pos, alpha, beta, depth - 1);
+        int score = mini<Us>(pos, alpha, beta, depth - 1, stop);
         pos.undo<Us>(move);
-        if (score >= beta) {
+        if (stop) {
+            return alpha;
+        } else if (score >= beta) {
             return beta;
         } else if (score > alpha) {
             alpha = score;
@@ -119,7 +122,7 @@ int maxi(Position& pos, int alpha, int beta, unsigned int depth) {
 }
 
 template <Color Us>
-int mini(Position& pos, int alpha, int beta, unsigned int depth) {
+int mini(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop) {
     if (depth == 0) {
         return evaluate<Us>(pos);
     }
@@ -134,9 +137,11 @@ int mini(Position& pos, int alpha, int beta, unsigned int depth) {
     }
     for (Move move : moves) {
         pos.play<~Us>(move);
-        int score = maxi<Us>(pos, alpha, beta, depth - 1);
+        int score = maxi<Us>(pos, alpha, beta, depth - 1, stop);
         pos.undo<~Us>(move);
-        if (score <= alpha) {
+        if (stop) {
+            return beta;
+        } else if (score <= alpha) {
             return alpha;
         } else if (score < beta) {
             beta = score;
@@ -146,45 +151,10 @@ int mini(Position& pos, int alpha, int beta, unsigned int depth) {
     return beta;
 }
 
-template <Color Us>
-Move find_best_move(Position& pos, unsigned int depth, tp::ThreadPool& pool, int* best_move_score_ret) {
-    MoveList<Us> moves(pos);
-
-    Move best_move;
-    int best_move_score = INT_MIN;
-
-    std::mutex mtx;
-    std::vector<std::shared_ptr<tp::Task>> tasks;
-
-    for (Move move : moves) {
-        tasks.push_back(pool.schedule([pos, depth, move, &best_move, &best_move_score, &mtx](void*) mutable {
-            pos.play<Us>(move);
-            int score = mini<Us>(pos, INT_MIN, INT_MAX, depth - 1);
-            pos.undo<Us>(move);
-            mtx.lock();
-            if (score > best_move_score) {
-                best_move = move;
-                best_move_score = score;
-            }
-            mtx.unlock();
-        }));
-    }
-
-    for (auto& task : tasks) {
-        task->await();
-    }
-
-    *best_move_score_ret = best_move_score;
-    return best_move;
-}
-
 template int evaluate<WHITE>(const Position& pos);
 template int evaluate<BLACK>(const Position& pos);
 
-template int maxi<WHITE>(Position& pos, int alpha, int beta, unsigned int depth);
-template int maxi<BLACK>(Position& pos, int alpha, int beta, unsigned int depth);
-template int mini<WHITE>(Position& pos, int alpha, int beta, unsigned int depth);
-template int mini<BLACK>(Position& pos, int alpha, int beta, unsigned int depth);
-
-template Move find_best_move<WHITE>(Position& pos, unsigned int depth, tp::ThreadPool& pool, int* best_move_score_ret);
-template Move find_best_move<BLACK>(Position& pos, unsigned int depth, tp::ThreadPool& pool, int* best_move_score_ret);
+template int maxi<WHITE>(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop);
+template int maxi<BLACK>(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop);
+template int mini<WHITE>(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop);
+template int mini<BLACK>(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop);
