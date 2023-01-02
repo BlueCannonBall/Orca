@@ -90,13 +90,53 @@ protected:
 
             str_case("go") :
             {
+                std::chrono::milliseconds movetime = std::chrono::milliseconds(-1);
+                std::chrono::milliseconds wtime = std::chrono::milliseconds(-1);
+                std::chrono::milliseconds btime = std::chrono::milliseconds(-1);
+                for (auto it = args.begin(); it != args.end(); it++) {
+                    if (*it == "movetime") {
+                        movetime = std::chrono::milliseconds(stoi(*++it));
+                    } else if (*it == "wtime") {
+                        wtime = std::chrono::milliseconds(stoi(*++it));
+                    } else if (*it == "btime") {
+                        btime = std::chrono::milliseconds(stoi(*++it));
+                    }
+                }
+
+                std::chrono::milliseconds search_time = std::chrono::seconds(10);
+                unsigned int starting_depth = 6;
+
                 Move best_move;
                 int best_move_score;
                 unsigned int best_move_depth;
                 if (pos.turn() == WHITE) {
-                    best_move = find_best_move<WHITE>(pos, std::chrono::seconds(10), 6, pool, &best_move_score, &best_move_depth);
+                    if (movetime != std::chrono::milliseconds(-1)) {
+                        search_time = movetime;
+                    } else if (wtime != std::chrono::milliseconds(-1)) {
+                        search_time = std::chrono::milliseconds(std::min(wtime.count() / 40, 10000L));
+                    }
+
+                    if (search_time.count() < 250) {
+                        starting_depth = 4;
+                    } else if (search_time.count() < 3000) {
+                        starting_depth = 5;
+                    }
+
+                    best_move = find_best_move<WHITE>(pos, search_time, starting_depth, pool, &best_move_score, &best_move_depth);
                 } else if (pos.turn() == BLACK) {
-                    best_move = find_best_move<BLACK>(pos, std::chrono::seconds(10), 6, pool, &best_move_score, &best_move_depth);
+                    if (movetime != std::chrono::milliseconds(-1)) {
+                        search_time = movetime;
+                    } else if (btime != std::chrono::milliseconds(-1)) {
+                        search_time = std::chrono::milliseconds(std::min(btime.count() / 40, 10000L));
+                    }
+
+                    if (search_time.count() < 250) {
+                        starting_depth = 4;
+                    } else if (search_time.count() < 3000) {
+                        starting_depth = 5;
+                    }
+
+                    best_move = find_best_move<BLACK>(pos, search_time, starting_depth, pool, &best_move_score, &best_move_depth);
                 } else {
                     throw std::logic_error("Invalid side to move");
                 }

@@ -88,7 +88,7 @@ int evaluate(const Position& pos) {
     }
 
     // Sum up various scores
-    return std::round((double) (mv + ca + cc + np + kp + pp) * 1.05l);
+    return std::round((double) (mv + ca + cc + np + kp + pp) * 1.05);
 }
 
 template <Color Us>
