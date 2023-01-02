@@ -13,10 +13,10 @@ int evaluate(const Position& pos) {
     int mv_us = 0;
     int mv_them = 0;
     for (size_t i = 0; i < NPIECE_TYPES - 1; i++) {
-        mv_us += __builtin_popcountll(pos.bitboard_of(Us, (PieceType) i)) * piece_values[i];
+        mv_us += pop_count(pos.bitboard_of(Us, (PieceType) i)) * piece_values[i];
     }
     for (size_t i = 0; i < NPIECE_TYPES - 1; i++) {
-        mv_them += __builtin_popcountll(pos.bitboard_of(~Us, (PieceType) i)) * piece_values[i];
+        mv_them += pop_count(pos.bitboard_of(~Us, (PieceType) i)) * piece_values[i];
     }
     mv += mv_us;
     mv -= mv_them;
@@ -46,8 +46,8 @@ int evaluate(const Position& pos) {
 
     // Knight placement
     int np = 0;
-    np -= __builtin_popcountll(pos.bitboard_of(Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
-    np += __builtin_popcountll(pos.bitboard_of(~Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
+    np -= pop_count(pos.bitboard_of(Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
+    np += pop_count(pos.bitboard_of(~Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
 
     // King placement
     /*
@@ -56,22 +56,38 @@ int evaluate(const Position& pos) {
     }
 
     let table = [[], []];
-    for (let y = 0; y < 8; y++) {
+    for (let y = 8; y > -1; y--) {
         for (let x = 0; x < 8; x++) {
             table[0].push(Math.round(-Math.min(distance(x, y, 0, 7), distance(x, y, 7, 7)) * 4));
             table[1].push(Math.round(-Math.min(distance(x, y, 0, 0), distance(x, y, 7, 0)) * 4));
         }
     }
     */
-    static constexpr int king_pcsq_table[2][64] = {
-        {-28, -28, -29, -30, -30, -29, -28, -28, -24, -24, -25, -27, -27, -25, -24, -24, -20, -20, -22, -23, -23, -22, -20, -20, -16, -16, -18, -20, -20, -18, -16, -16, -12, -13, -14, -17, -17, -14, -13, -12, -8, -9, -11, -14, -14, -11, -9, -8, -4, -6, -9, -13, -13, -9, -6, -4, 0, -4, -8, -12, -12, -8, -4, 0},
-        {0, -4, -8, -12, -12, -8, -4, 0, -4, -6, -9, -13, -13, -9, -6, -4, -8, -9, -11, -14, -14, -11, -9, -8, -12, -13, -14, -17, -17, -14, -13, -12, -16, -16, -18, -20, -20, -18, -16, -16, -20, -20, -22, -23, -23, -22, -20, -20, -24, -24, -25, -27, -27, -25, -24, -24, -28, -28, -29, -30, -30, -29, -28, -28},
-    };
+    static constexpr int king_pcsq_table[2][64] = {{0, -4, -8, -12, -12, -8, -4, 0, -4, -6, -9, -13, -13, -9, -6, -4, -8, -9, -11, -14, -14, -11, -9, -8, -12, -13, -14, -17, -17, -14, -13, -12, -16, -16, -18, -20, -20, -18, -16, -16, -20, -20, -22, -23, -23, -22, -20, -20, -24, -24, -25, -27, -27, -25, -24, -24, -28, -28, -29, -30, -30, -29, -28, -28}, {-28, -28, -29, -30, -30, -29, -28, -28, -24, -24, -25, -27, -27, -25, -24, -24, -20, -20, -22, -23, -23, -22, -20, -20, -16, -16, -18, -20, -20, -18, -16, -16, -12, -13, -14, -17, -17, -14, -13, -12, -8, -9, -11, -14, -14, -11, -9, -8, -4, -6, -9, -13, -13, -9, -6, -4, 0, -4, -8, -12, -12, -8, -4, 0}};
     int kp = 0;
-    kp += king_pcsq_table[Us][__builtin_clzll(pos.bitboard_of(Us, KING))];
-    kp -= king_pcsq_table[~Us][__builtin_clzll(pos.bitboard_of(~Us, KING))];
+    kp += king_pcsq_table[Us][bsf(pos.bitboard_of(Us, KING))];
+    kp -= king_pcsq_table[~Us][bsf(pos.bitboard_of(~Us, KING))];
 
-    return mv + ca + cc + np + kp;
+    // Pawn placement
+    int pp = 0;
+    for (int file = AFILE; file < HFILE; file++) {
+        int pawn_count[2] = {0, 0};
+        for (int rank = RANK2; rank < RANK7; rank++) {
+            Piece piece = pos.at(create_square((File) file, (Rank) rank));
+            if (type_of(piece) == PAWN) {
+                pawn_count[color_of(piece)]++;
+            }
+        }
+        if (pawn_count[Us] > 1) {
+            pp -= (pawn_count[Us] - 1) * 75;
+        }
+        if (pawn_count[~Us] > 1) {
+            pp += (pawn_count[~Us] - 1) * 75;
+        }
+    }
+
+    // Sum up various scores
+    return mv + ca + cc + np + kp + pp;
 }
 
 template <Color Us>

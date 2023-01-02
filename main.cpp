@@ -114,6 +114,18 @@ protected:
                 std::cout << pos << std::endl;
                 break;
             }
+
+            str_case("evaluate") :
+            {
+                if (pos.turn() == WHITE) {
+                    this->send_message("score", {std::to_string(evaluate<WHITE>(pos))});
+                } else if (pos.turn() == BLACK) {
+                    this->send_message("score", {std::to_string(evaluate<BLACK>(pos))});
+                } else {
+                    throw std::logic_error("Invalid side to move");
+                }
+                break;
+            }
         }
     }
 };
