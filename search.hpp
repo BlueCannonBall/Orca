@@ -20,8 +20,11 @@ constexpr int piece_values[NPIECE_TYPES] = {
 
 GameProgress get_progress(int mv1, int mv2);
 
-template <Color C>
+template <Color Us>
 int evaluate(const Position& pos);
+
+template <Color Us>
+int see(const Position& pos, Square square);
 
 template <Color Us>
 int maxi(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop);

@@ -87,6 +87,12 @@ int evaluate(const Position& pos) {
 }
 
 template <Color Us>
+int see(const Position& pos, Square sq) {
+    Bitboard attackers_us = pos.attackers_from<Us>(sq);
+    Bitboard attackers_them = pos.attackers_from<~Us>(sq);
+}
+
+template <Color Us>
 int maxi(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop) {
     if (depth == 0) {
         return evaluate<Us>(pos);
@@ -148,6 +154,9 @@ int mini(Position& pos, int alpha, int beta, unsigned int depth, const std::atom
 
 template int evaluate<WHITE>(const Position& pos);
 template int evaluate<BLACK>(const Position& pos);
+
+template int see<WHITE>(const Position& pos, Square square);
+template int see<BLACK>(const Position& pos, Square square);
 
 template int maxi<WHITE>(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop);
 template int maxi<BLACK>(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop);
