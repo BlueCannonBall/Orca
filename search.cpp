@@ -1,6 +1,8 @@
 #include "search.hpp"
+#include "surge/src/types.h"
 #include <atomic>
 #include <climits>
+#include <cassert>
 #include <cmath>
 
 GameProgress get_progress(int mv1, int mv2) {
@@ -15,8 +17,6 @@ int evaluate(const Position& pos) {
     int mv_them = 0;
     for (size_t i = 0; i < NPIECE_TYPES - 1; i++) {
         mv_us += pop_count(pos.bitboard_of(Us, (PieceType) i)) * piece_values[i];
-    }
-    for (size_t i = 0; i < NPIECE_TYPES - 1; i++) {
         mv_them += pop_count(pos.bitboard_of(~Us, (PieceType) i)) * piece_values[i];
     }
     mv += mv_us;
@@ -88,8 +88,64 @@ int evaluate(const Position& pos) {
 
 template <Color Us>
 int see(const Position& pos, Square sq) {
-    Bitboard attackers_us = pos.attackers_from<Us>(sq);
-    Bitboard attackers_them = pos.attackers_from<~Us>(sq);
+    assert(pos.at(sq) == NO_PIECE || color_of(pos.at(sq)) != Us);
+
+    Bitboard all_pieces  = pos.all_pieces<WHITE>() | pos.all_pieces<BLACK>();
+
+    Bitboard attackers[2];
+    attackers[Us] = pos.attackers_from<Us>(sq, all_pieces);
+    attackers[~Us] = pos.attackers_from<~Us>(sq, all_pieces);
+
+    int attackers_count[2][NPIECE_TYPES];
+    for (size_t i = 0; i < NPIECE_TYPES; i++) {
+        attackers_count[Us][i] = pop_count(attackers[Us] & pos.bitboard_of(Us, (PieceType) i));
+        attackers_count[~Us][i] = pop_count(attackers[~Us] & pos.bitboard_of(~Us, (PieceType) i));
+    }
+
+    int ret = 0;
+    size_t current_attackers[2] = {PAWN, PAWN};
+    int sq_occupation = (pos.at(sq) == NO_PIECE) ? -1 : type_of(pos.at(sq));
+    for (;;) {
+        {
+            bool attacked = false;
+            for (size_t attacker = current_attackers[Us]; attacker < NPIECE_TYPES; attacker++) {
+                current_attackers[Us] = attacker;
+                if (attackers_count[Us][attacker]) {
+                    if (sq_occupation >= 0) {
+                        ret += piece_values[sq_occupation];
+                    }
+                    sq_occupation = attacker;
+                    attackers_count[Us][attacker]--;
+                    attacked = true;
+                    break;
+                }
+            }
+            if (!attacked) {
+                break;
+            }
+        }
+
+        {
+            bool attacked = false;
+            for (size_t attacker = current_attackers[~Us]; attacker < NPIECE_TYPES; attacker++) {
+                current_attackers[~Us] = attacker;
+                if (attackers_count[~Us][attacker]) {
+                    if (sq_occupation >= 0) {
+                        ret -= piece_values[sq_occupation];
+                    }
+                    sq_occupation = attacker;
+                    attackers_count[~Us][attacker]--;
+                    attacked = true;
+                    break;
+                }
+            }
+            if (!attacked) {
+                break;
+            }
+        }
+    }
+
+    return ret;
 }
 
 template <Color Us>
@@ -108,6 +164,10 @@ int maxi(Position& pos, int alpha, int beta, unsigned int depth, const std::atom
     }
     for (Move move : moves) {
         pos.play<Us>(move);
+        if (see<~Us>(pos, move.to()) < -100) {
+            pos.undo<Us>(move);
+            continue;
+        }
         int score = mini<Us>(pos, alpha, beta, depth - 1, stop);
         pos.undo<Us>(move);
         if (stop) {
@@ -138,6 +198,10 @@ int mini(Position& pos, int alpha, int beta, unsigned int depth, const std::atom
     }
     for (Move move : moves) {
         pos.play<~Us>(move);
+        if (see<Us>(pos, move.to()) > 100) {
+            pos.undo<~Us>(move);
+            continue;
+        }
         int score = maxi<Us>(pos, alpha, beta, depth - 1, stop);
         pos.undo<~Us>(move);
         if (stop) {
