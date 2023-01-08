@@ -98,8 +98,13 @@ int see(const Position& pos, Square sq) {
 
     int attackers_count[2][NPIECE_TYPES];
     for (size_t i = 0; i < NPIECE_TYPES; i++) {
-        attackers_count[Us][i] = pop_count(attackers[Us] & pos.bitboard_of(Us, (PieceType) i));
-        attackers_count[~Us][i] = pop_count(attackers[~Us] & pos.bitboard_of(~Us, (PieceType) i));
+        if (i == BISHOP) {
+            attackers_count[Us][i] = pop_count(attackers[Us] & pos.bitboard_of(Us, (PieceType) i));
+            attackers_count[~Us][i] = pop_count(attackers[~Us] & pos.bitboard_of(~Us, (PieceType) i));
+        } else {
+            attackers_count[Us][i] = pop_count(attackers[Us] & pos.bitboard_of(Us, (PieceType) i));
+            attackers_count[~Us][i] = pop_count(attackers[~Us] & pos.bitboard_of(~Us, (PieceType) i));
+        }
     }
 
     int ret = 0;
@@ -164,10 +169,10 @@ int maxi(Position& pos, int alpha, int beta, unsigned int depth, const std::atom
     }
     for (Move move : moves) {
         pos.play<Us>(move);
-        if (see<~Us>(pos, move.to()) < -100) {
-            pos.undo<Us>(move);
-            continue;
-        }
+        // if (see<~Us>(pos, move.to()) < -100) {
+        //     pos.undo<Us>(move);
+        //     continue;
+        // }
         int score = mini<Us>(pos, alpha, beta, depth - 1, stop);
         pos.undo<Us>(move);
         if (stop) {
@@ -198,10 +203,10 @@ int mini(Position& pos, int alpha, int beta, unsigned int depth, const std::atom
     }
     for (Move move : moves) {
         pos.play<~Us>(move);
-        if (see<Us>(pos, move.to()) > 100) {
-            pos.undo<~Us>(move);
-            continue;
-        }
+        // if (see<Us>(pos, move.to()) > 100) {
+        //     pos.undo<~Us>(move);
+        //     continue;
+        // }
         int score = maxi<Us>(pos, alpha, beta, depth - 1, stop);
         pos.undo<~Us>(move);
         if (stop) {
