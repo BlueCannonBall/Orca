@@ -1,8 +1,8 @@
 CXX = g++
-CXXFLAGS = -Wall -Wno-unknown-pragmas -std=c++14 -O3 -flto -pthread
+CXXFLAGS = -Wall -Wno-unknown-pragmas -std=c++14 -Ofast -flto -pthread
 HEADERS = $(shell find . -name "*.h" -o -name "*.hpp")
 OBJDIR = obj
-OBJS = $(OBJDIR)/main.o $(OBJDIR)/position.o $(OBJDIR)/tables.o $(OBJDIR)/types.o $(OBJDIR)/search.o
+OBJS = $(OBJDIR)/main.o $(OBJDIR)/position.o $(OBJDIR)/tables.o $(OBJDIR)/types.o $(OBJDIR)/util.o $(OBJDIR)/search.o
 TARGET = orca
 
 $(TARGET): $(OBJS)
@@ -21,6 +21,10 @@ $(OBJDIR)/tables.o: surge/src/tables.cpp surge/src/*.h
 	$(CXX) -c $< $(CXXFLAGS) -o $@
 
 $(OBJDIR)/types.o: surge/src/types.cpp surge/src/*.h
+	mkdir -p $(OBJDIR)
+	$(CXX) -c $< $(CXXFLAGS) -o $@
+
+$(OBJDIR)/util.o: util.cpp $(HEADERS)
 	mkdir -p $(OBJDIR)
 	$(CXX) -c $< $(CXXFLAGS) -o $@
 

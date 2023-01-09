@@ -1,8 +1,10 @@
 #include "search.hpp"
 #include "surge/src/types.h"
+#include "util.hpp"
+#include <algorithm>
 #include <atomic>
-#include <climits>
 #include <cassert>
+#include <climits>
 #include <cmath>
 
 GameProgress get_progress(int mv1, int mv2) {
@@ -13,15 +15,15 @@ template <Color Us>
 int evaluate(const Position& pos) {
     // Material value
     int mv = 0;
-    int mv_us = 0;
-    int mv_them = 0;
+    int our_mv = 0;
+    int their_mv = 0;
     for (size_t i = 0; i < NPIECE_TYPES - 1; i++) {
-        mv_us += pop_count(pos.bitboard_of(Us, (PieceType) i)) * piece_values[i];
-        mv_them += pop_count(pos.bitboard_of(~Us, (PieceType) i)) * piece_values[i];
+        our_mv += pop_count(pos.bitboard_of(Us, (PieceType) i)) * piece_values[i];
+        their_mv += pop_count(pos.bitboard_of(~Us, (PieceType) i)) * piece_values[i];
     }
-    mv += mv_us;
-    mv -= mv_them;
-    GameProgress progress = get_progress(mv_us, mv_them);
+    mv += our_mv;
+    mv -= their_mv;
+    GameProgress progress = get_progress(our_mv, their_mv);
 
     // Color advantage
     int ca = 0;
@@ -47,8 +49,8 @@ int evaluate(const Position& pos) {
 
     // Knight placement
     int np = 0;
-    np -= sparse_pop_count(pos.bitboard_of(Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
-    np += sparse_pop_count(pos.bitboard_of(~Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
+    np -= pop_count(pos.bitboard_of(Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
+    np += pop_count(pos.bitboard_of(~Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
 
     // King placement
     /*
@@ -72,13 +74,13 @@ int evaluate(const Position& pos) {
     // Pawn placement
     int pp = 0;
     for (int file = AFILE; file < HFILE; file++) {
-        int pawn_count_us = sparse_pop_count(pos.bitboard_of(Us, PAWN) & MASK_FILE[file]);
-        int pawn_count_them = sparse_pop_count(pos.bitboard_of(~Us, PAWN) & MASK_FILE[file]);
-        if (pawn_count_us > 1) {
-            pp -= (pawn_count_us - 1) * 75;
+        int our_pawn_count = sparse_pop_count(pos.bitboard_of(Us, PAWN) & MASK_FILE[file]);
+        int their_pawn_count = sparse_pop_count(pos.bitboard_of(~Us, PAWN) & MASK_FILE[file]);
+        if (our_pawn_count > 1) {
+            pp -= (our_pawn_count - 1) * 75;
         }
-        if (pawn_count_them > 1) {
-            pp += (pawn_count_them - 1) * 75;
+        if (their_pawn_count > 1) {
+            pp += (their_pawn_count - 1) * 75;
         }
     }
 
@@ -88,8 +90,6 @@ int evaluate(const Position& pos) {
 
 template <Color Us>
 int see(const Position& pos, Square sq) {
-    assert(pos.at(sq) == NO_PIECE || color_of(pos.at(sq)) != Us);
-
     Bitboard all_pieces  = pos.all_pieces<WHITE>() | pos.all_pieces<BLACK>();
 
     Bitboard attackers[2];
@@ -98,13 +98,8 @@ int see(const Position& pos, Square sq) {
 
     int attackers_count[2][NPIECE_TYPES];
     for (size_t i = 0; i < NPIECE_TYPES; i++) {
-        if (i == BISHOP) {
-            attackers_count[Us][i] = pop_count(attackers[Us] & pos.bitboard_of(Us, (PieceType) i));
-            attackers_count[~Us][i] = pop_count(attackers[~Us] & pos.bitboard_of(~Us, (PieceType) i));
-        } else {
-            attackers_count[Us][i] = pop_count(attackers[Us] & pos.bitboard_of(Us, (PieceType) i));
-            attackers_count[~Us][i] = pop_count(attackers[~Us] & pos.bitboard_of(~Us, (PieceType) i));
-        }
+        attackers_count[Us][i] = pop_count(attackers[Us] & pos.bitboard_of(Us, (PieceType) i));
+        attackers_count[~Us][i] = pop_count(attackers[~Us] & pos.bitboard_of(~Us, (PieceType) i));
     }
 
     int ret = 0;
@@ -159,22 +154,31 @@ int maxi(Position& pos, int alpha, int beta, unsigned int depth, const std::atom
         return evaluate<Us>(pos);
     }
 
-    MoveList<Us> moves(pos);
-    if (moves.empty()) {
+    Move moves[218];
+    Move* last = pos.generate_legals<Us>(moves);
+    std::sort(moves, last, [&pos](Move a, Move b) {
+        pos.play<Us>(a);
+        int a_swapoff = -see<~Us>(pos, a.to());
+        pos.undo<Us>(a);
+
+        pos.play<Us>(b);
+        int b_swapoff = -see<~Us>(pos, b.to());
+        pos.undo<Us>(b);
+
+        return a_swapoff > b_swapoff;
+    });
+
+    if (moves == last) {
         if (pos.in_check<Us>()) {
             return -piece_values[KING] - depth;
         } else {
             return 0;
         }
     }
-    for (Move move : moves) {
-        pos.play<Us>(move);
-        // if (see<~Us>(pos, move.to()) < -100) {
-        //     pos.undo<Us>(move);
-        //     continue;
-        // }
+    for (auto it = moves; it != last; it++) {
+        pos.play<Us>(*it);
         int score = mini<Us>(pos, alpha, beta, depth - 1, stop);
-        pos.undo<Us>(move);
+        pos.undo<Us>(*it);
         if (stop) {
             return alpha;
         } else if (score >= beta) {
@@ -193,22 +197,31 @@ int mini(Position& pos, int alpha, int beta, unsigned int depth, const std::atom
         return evaluate<Us>(pos);
     }
 
-    MoveList<~Us> moves(pos);
-    if (moves.empty()) {
+    Move moves[218];
+    Move* last = pos.generate_legals<~Us>(moves);
+    std::sort(moves, last, [&pos](Move a, Move b) {
+        pos.play<~Us>(a);
+        int a_swapoff = see<Us>(pos, a.to());
+        pos.undo<~Us>(a);
+
+        pos.play<~Us>(b);
+        int b_swapoff = see<Us>(pos, b.to());
+        pos.undo<~Us>(b);
+
+        return a_swapoff < b_swapoff;
+    });
+
+    if (moves == last) {
         if (pos.in_check<~Us>()) {
             return piece_values[KING] + depth;
         } else {
             return 0;
         }
     }
-    for (Move move : moves) {
-        pos.play<~Us>(move);
-        // if (see<Us>(pos, move.to()) > 100) {
-        //     pos.undo<~Us>(move);
-        //     continue;
-        // }
+    for (auto it = moves; it != last; it++) {
+        pos.play<~Us>(*it);
         int score = maxi<Us>(pos, alpha, beta, depth - 1, stop);
-        pos.undo<~Us>(move);
+        pos.undo<~Us>(*it);
         if (stop) {
             return beta;
         } else if (score <= alpha) {
