@@ -259,7 +259,11 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std:
         }
 
         pos.play<Us>(*move);
-        int score = -alpha_beta<~Us>(pos, -beta, -alpha, depth - 1, tt, stop);
+        int reduced_depth = depth - 1;
+        if (move - moves > 4 && depth > 3) {
+            reduced_depth -= 2;
+        }
+        int score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth, tt, stop);
         pos.undo<Us>(*move);
 
         if (stop) {
