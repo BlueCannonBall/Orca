@@ -87,9 +87,9 @@ int evaluate(const Position& pos) {
     // Check status
     int cs = 0;
     if (pos.in_check<Us>()) {
-        cs = -23;
+        cs = -20;
     } else if (pos.in_check<~Us>()) {
-        cs = 23;
+        cs = 20;
     }
 
     // Pinned count
@@ -202,8 +202,13 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std:
         pos.undo<Us>(*move);
 
         sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
+
         if (move->is_capture()) {
             sort_scores[move->from()][move->to()] += 15;
+        }
+
+        if (move->is_promotion()) {
+            sort_scores[move->from()][move->to()] += 30;
         }
     }
     std::sort(moves, last_move, [&sort_scores](Move a, Move b) {
@@ -266,6 +271,7 @@ int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::at
 
     Move moves[218];
     Move* last_move = pos.generate_legals<Us>(moves);
+
     int static_move_scores[64][64] = {{0}};
     int sort_scores[64][64] = {{0}};
     for (const Move* move = moves; move != last_move; move++) {
@@ -275,6 +281,10 @@ int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::at
             pos.undo<Us>(*move);
 
             sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
+
+            if (move->is_promotion()) {
+                sort_scores[move->from()][move->to()] += 30;
+            }
         } else {
             sort_scores[move->from()][move->to()] = -piece_values[KING] * 2;
         }
