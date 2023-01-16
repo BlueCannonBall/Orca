@@ -44,7 +44,7 @@ template <Color Us>
 int see(const Position& pos, Square sq);
 
 template <Color Us>
-int pvs(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
+int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
 
 template <Color Us>
 int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
@@ -78,7 +78,7 @@ Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, i
                     TT& tt = tts[move - moves];
 
                     pos.play<Us>(*move);
-                    int score = -pvs<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, tt, stop);
+                    int score = -alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, tt, stop);
                     pos.undo<Us>(*move);
 
                     if (!stop) {

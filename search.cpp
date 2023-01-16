@@ -180,7 +180,7 @@ int see(const Position& pos, Square sq) {
 }
 
 template <Color Us>
-int pvs(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop) {
+int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop) {
     TT::iterator entry_it = tt.find(pos.get_hash());
     Move hash_move;
     if (entry_it != tt.end()) {
@@ -259,7 +259,7 @@ int pvs(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic
         }
 
         pos.play<Us>(*move);
-        int score = -pvs<~Us>(pos, -beta, -alpha, depth - 1, tt, stop);
+        int score = -alpha_beta<~Us>(pos, -beta, -alpha, depth - 1, tt, stop);
         pos.undo<Us>(*move);
 
         if (stop) {
@@ -395,8 +395,8 @@ template int evaluate<BLACK>(const Position& pos);
 template int see<WHITE>(const Position& pos, Square sq);
 template int see<BLACK>(const Position& pos, Square sq);
 
-template int pvs<WHITE>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
-template int pvs<BLACK>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
+template int alpha_beta<WHITE>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
+template int alpha_beta<BLACK>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
 
 template int quiesce<WHITE>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
 template int quiesce<BLACK>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
