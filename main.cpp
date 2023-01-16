@@ -42,6 +42,17 @@ protected:
                         }
                     }
                     pos = Position(fen);
+                    if (args.size() > 7) {
+                        for (size_t i = 8; i < args.size(); i++) {
+                            Square from = create_square(File(args[i][0] - 'a'), Rank(args[i][1] - '1'));
+                            Square to = create_square(File(args[i][2] - 'a'), Rank(args[i][3] - '1'));
+                            if (((i - 8) % 2) == 0) {
+                                pos.play<WHITE>(Move(from, to, generate_move_flags<WHITE>(pos, from, to)));
+                            } else {
+                                pos.play<BLACK>(Move(from, to, generate_move_flags<BLACK>(pos, from, to)));
+                            }
+                        }
+                    }
                 }
                 break;
             }
@@ -62,11 +73,11 @@ protected:
                 }
 
                 std::chrono::milliseconds search_time = std::chrono::seconds(10);
-                unsigned int starting_depth = 6;
+                int starting_depth = 6;
 
                 Move best_move;
                 int best_move_score;
-                unsigned int best_move_depth;
+                int best_move_depth;
                 if (pos.turn() == WHITE) {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
@@ -125,18 +136,6 @@ protected:
                 }
                 break;
             }
-
-            str_case("see") :
-            {
-                if (pos.turn() == WHITE) {
-                    this->send_message("swapoff", {std::to_string(see<WHITE>(pos, create_square(File(args[0][0] - 'a'), Rank(args[0][1] - '1'))))});
-                } else if (pos.turn() == BLACK) {
-                    this->send_message("swapoff", {std::to_string(see<BLACK>(pos, create_square(File(args[0][0] - 'a'), Rank(args[0][1] - '1'))))});
-                } else {
-                    throw std::logic_error("Invalid side to move");
-                }
-                break;
-            }
         }
     }
 };
@@ -149,6 +148,9 @@ int main() {
     for (;;) {
         engine.poll();
     }
+
+    // Position pos("rnbqkb1r/ppp2ppp/4pn2/3p4/8/2N5/PPPPPPPP/R1BQKBNR w KQkq - 0 1");
+    // std::cout << see(pos, Move(c3, d5, CAPTURE), -100) << std::endl;
 
     return 0;
 }

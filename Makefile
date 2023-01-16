@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -Wall -Wno-unknown-pragmas -std=c++14 -Ofast -flto -pthread
+CXXFLAGS = -Wall -Wno-unknown-pragmas -std=c++14 -Ofast -flto -march=native -mtune=native -pthread
 HEADERS = $(shell find . -name "*.h" -o -name "*.hpp")
 OBJDIR = obj
 OBJS = $(OBJDIR)/main.o $(OBJDIR)/position.o $(OBJDIR)/tables.o $(OBJDIR)/types.o $(OBJDIR)/util.o $(OBJDIR)/search.o

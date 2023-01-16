@@ -88,97 +88,137 @@ int evaluate(const Position& pos) {
     return mv + ca + cc + np + kp + pp;
 }
 
-template <Color Us>
-int see(const Position& pos, Square sq) {
-    Bitboard all_pieces  = pos.all_pieces<WHITE>() | pos.all_pieces<BLACK>();
-
-    Bitboard attackers[2];
-    attackers[Us] = pos.attackers_from<Us>(sq, all_pieces);
-    attackers[~Us] = pos.attackers_from<~Us>(sq, all_pieces);
-
-    int attackers_count[2][NPIECE_TYPES];
-    for (size_t i = 0; i < NPIECE_TYPES; i++) {
-        attackers_count[Us][i] = pop_count(attackers[Us] & pos.bitboard_of(Us, (PieceType) i));
-        attackers_count[~Us][i] = pop_count(attackers[~Us] & pos.bitboard_of(~Us, (PieceType) i));
+bool see(const Position& pos, Move move, int threshold) {
+    if (move.is_promotion()) {
+        return true;
     }
 
-    int ret = 0;
-    size_t current_attackers[2] = {PAWN, PAWN};
-    int sq_occupation = (pos.at(sq) == NO_PIECE) ? -1 : type_of(pos.at(sq));
+    Square from_sq = move.from(), to_sq = move.to();
+
+    int value = piece_values[type_of(pos.at(to_sq))] - threshold;
+    if (value < 0)
+        return false;
+
+    value -= piece_values[type_of(pos.at(from_sq))];
+    if (value >= 0)
+        return true;
+
+    Bitboard occ = BOTH_COLOR_CALL(pos.all_pieces) ^ SQUARE_BB[from_sq];
+    Bitboard attackers = BOTH_COLOR_CALL(pos.attackers_from, to_sq, occ);
+    Bitboard our_attackers;
+
+    Bitboard diagonal_sliders = BOTH_COLOR_CALL(pos.diagonal_sliders);
+    Bitboard orthogonal_sliders = BOTH_COLOR_CALL(pos.orthogonal_sliders);
+
+    Color us = ~pos.turn();
     for (;;) {
-        {
-            bool attacked = false;
-            for (size_t attacker = current_attackers[Us]; attacker < NPIECE_TYPES; attacker++) {
-                current_attackers[Us] = attacker;
-                if (attackers_count[Us][attacker]) {
-                    if (sq_occupation >= 0) {
-                        ret += piece_values[sq_occupation];
-                    }
-                    sq_occupation = attacker;
-                    attackers_count[Us][attacker]--;
-                    attacked = true;
-                    break;
-                }
-            }
-            if (!attacked) {
+        attackers &= occ;
+        our_attackers = attackers & DYN_COLOR_CALL(pos.all_pieces, us);
+
+        if (our_attackers == Bitboard(0)) {
+            break;
+        }
+
+        PieceType attacking_pt = attacking_pt;
+        for (size_t i = 0; i < NPIECE_TYPES; i++) {
+            if ((our_attackers & pos.bitboard_of(us, (PieceType) i)) != Bitboard(0)) {
+                attacking_pt = (PieceType) i;
                 break;
             }
         }
 
-        {
-            bool attacked = false;
-            for (size_t attacker = current_attackers[~Us]; attacker < NPIECE_TYPES; attacker++) {
-                current_attackers[~Us] = attacker;
-                if (attackers_count[~Us][attacker]) {
-                    if (sq_occupation >= 0) {
-                        ret -= piece_values[sq_occupation];
-                    }
-                    sq_occupation = attacker;
-                    attackers_count[~Us][attacker]--;
-                    attacked = true;
-                    break;
-                }
+        us = ~us;
+
+        value = -value - 1 - piece_values[attacking_pt];
+
+        std::cout << value << std::endl;
+        if (value >= 0) {
+            if (attacking_pt == KING && ((attackers & DYN_COLOR_CALL(pos.all_pieces, us)) != Bitboard(0))) {
+                us = ~us;
             }
-            if (!attacked) {
-                break;
-            }
+            break;
+        }
+
+        occ ^= SQUARE_BB[bsf(our_attackers & pos.bitboard_of(us, attacking_pt))];
+
+        if (attacking_pt == PAWN || attacking_pt == BISHOP || attacking_pt == QUEEN) {
+            attackers |= attacks<BISHOP>(to_sq, occ) & diagonal_sliders;
+        }
+        if (attacking_pt == ROOK || attacking_pt == QUEEN) {
+            attackers |= attacks<ROOK>(to_sq, occ) & orthogonal_sliders;
         }
     }
 
-    return ret;
+    return us != color_of(pos.at(from_sq));
 }
 
 template <Color Us>
-int maxi(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop) {
+int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop) {
+    TT::iterator entry_it = tt.find(pos.get_hash());
+    if (entry_it != tt.end() && entry_it->second.depth >= depth) {
+        return entry_it->second.score;
+    }
+
     if (depth == 0) {
-        return evaluate<Us>(pos);
+        int score = quiesce<Us>(pos, alpha, beta, depth - 1, tt, stop);
+        if (entry_it != tt.end()) {
+            entry_it->second.score = score;
+            entry_it->second.depth = depth;
+        } else {
+            tt[pos.get_hash()] = TTEntry(score, depth);
+        }
+        return score;
     }
 
     Move moves[218];
-    Move* last = pos.generate_legals<Us>(moves);
-    std::sort(moves, last, [&pos](Move a, Move b) {
-        pos.play<Us>(a);
-        int a_swapoff = -see<~Us>(pos, a.to());
-        pos.undo<Us>(a);
+    Move* last_move = pos.generate_legals<Us>(moves);
 
-        pos.play<Us>(b);
-        int b_swapoff = -see<~Us>(pos, b.to());
-        pos.undo<Us>(b);
-
-        return a_swapoff > b_swapoff;
-    });
-
-    if (moves == last) {
+    if (moves == last_move) {
         if (pos.in_check<Us>()) {
             return -piece_values[KING] - depth;
         } else {
             return 0;
         }
     }
-    for (auto it = moves; it != last; it++) {
-        pos.play<Us>(*it);
-        int score = mini<Us>(pos, alpha, beta, depth - 1, stop);
-        pos.undo<Us>(*it);
+
+    int static_move_scores[64][64] = {{0}};
+    int sort_scores[64][64] = {{0}};
+    for (const Move* move = moves; move != last_move; move++) {
+        pos.play<Us>(*move);
+        static_move_scores[move->from()][move->to()] = evaluate<Us>(pos);
+        pos.undo<Us>(*move);
+
+        sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
+        if (move->is_capture()) {
+            sort_scores[move->from()][move->to()] += 15;
+        }
+    }
+    std::sort(moves, last_move, [&sort_scores](Move a, Move b) {
+        return sort_scores[a.from()][a.to()] > sort_scores[b.from()][b.to()];
+    });
+
+    for (const Move* move = moves; move != last_move; move++) {
+        if (depth == 2 && static_move_scores[move->from()][move->to()] <= alpha) {
+            break;
+        }
+
+        // Null move heuristic
+        // if (depth > 3 && !pos.in_check<Us>() && (pos.bitboard_of(Us, KNIGHT) || pos.bitboard_of(Us, BISHOP) || pos.bitboard_of(Us, ROOK) || pos.bitboard_of(Us, QUEEN))) {
+        //     pos.play<Us>(Move());
+        //     int score = -alpha_beta<~Us>(pos, -beta, -alpha, depth - 3, tt, stop);
+        //     pos.undo<Us>(Move());
+
+        //     if (stop) {
+        //         return alpha;
+        //     } else if (score >= beta) {
+        //         return beta;
+        //     }
+        // }
+
+        pos.play<Us>(*move);
+        int score = -alpha_beta<~Us>(pos, -beta, -alpha, depth - 1, tt, stop);
+        pos.undo<Us>(*move);
+
         if (stop) {
             return alpha;
         } else if (score >= beta) {
@@ -188,59 +228,76 @@ int maxi(Position& pos, int alpha, int beta, unsigned int depth, const std::atom
         }
     }
 
+    if (entry_it != tt.end()) {
+        entry_it->second.score = alpha;
+        entry_it->second.depth = depth;
+    } else {
+        tt[pos.get_hash()] = TTEntry(alpha, depth);
+    }
     return alpha;
 }
 
 template <Color Us>
-int mini(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop) {
-    if (depth == 0) {
-        return evaluate<Us>(pos);
+int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop) {
+    TT::iterator entry_it = tt.find(pos.get_hash());
+    if (entry_it != tt.end() && entry_it->second.depth >= depth) {
+        return entry_it->second.score;
+    }
+
+    int stand_pat = evaluate<Us>(pos);
+    if (stand_pat >= beta) {
+        return beta;
+    } else if (alpha < stand_pat) {
+        alpha = stand_pat;
     }
 
     Move moves[218];
-    Move* last = pos.generate_legals<~Us>(moves);
-    std::sort(moves, last, [&pos](Move a, Move b) {
-        pos.play<~Us>(a);
-        int a_swapoff = see<Us>(pos, a.to());
-        pos.undo<~Us>(a);
+    Move* last_move = pos.generate_legals<Us>(moves);
 
-        pos.play<~Us>(b);
-        int b_swapoff = see<Us>(pos, b.to());
-        pos.undo<~Us>(b);
-
-        return a_swapoff < b_swapoff;
-    });
-
-    if (moves == last) {
-        if (pos.in_check<~Us>()) {
-            return piece_values[KING] + depth;
+    if (moves == last_move) {
+        if (pos.in_check<Us>()) {
+            return -piece_values[KING] - depth;
         } else {
             return 0;
         }
     }
-    for (auto it = moves; it != last; it++) {
-        pos.play<~Us>(*it);
-        int score = maxi<Us>(pos, alpha, beta, depth - 1, stop);
-        pos.undo<~Us>(*it);
+
+    for (const Move* move = moves; move != last_move; move++) {
+        if (!move->is_capture()) {
+            continue;
+        }
+
+        if (piece_values[type_of(pos.at(move->to()))] + 200 <= alpha) {
+            continue;
+        }
+
+        pos.play<Us>(*move);
+        int score = -quiesce<~Us>(pos, -beta, -alpha, depth - 1, tt, stop);
+        pos.undo<Us>(*move);
+
         if (stop) {
-            return beta;
-        } else if (score <= alpha) {
             return alpha;
-        } else if (score < beta) {
-            beta = score;
+        } else if (score >= beta) {
+            return beta;
+        } else if (score > alpha) {
+            alpha = score;
         }
     }
 
-    return beta;
+    if (entry_it != tt.end()) {
+        entry_it->second.score = alpha;
+        entry_it->second.depth = depth;
+    } else {
+        tt[pos.get_hash()] = TTEntry(alpha, depth);
+    }
+    return alpha;
 }
 
 template int evaluate<WHITE>(const Position& pos);
 template int evaluate<BLACK>(const Position& pos);
 
-template int see<WHITE>(const Position& pos, Square square);
-template int see<BLACK>(const Position& pos, Square square);
+template int alpha_beta<WHITE>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
+template int alpha_beta<BLACK>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
 
-template int maxi<WHITE>(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop);
-template int maxi<BLACK>(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop);
-template int mini<WHITE>(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop);
-template int mini<BLACK>(Position& pos, int alpha, int beta, unsigned int depth, const std::atomic<bool>& stop);
+template int quiesce<WHITE>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
+template int quiesce<BLACK>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
