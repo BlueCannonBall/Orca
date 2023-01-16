@@ -80,7 +80,7 @@ protected:
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
                     } else if (wtime != std::chrono::milliseconds(-1)) {
-                        search_time = std::chrono::milliseconds(std::min(wtime.count() / 40, 10000L));
+                        search_time = std::chrono::milliseconds(std::min(wtime.count() / 38, 10000L));
                     }
 
                     if (search_time.count() < 250) {
@@ -94,7 +94,7 @@ protected:
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
                     } else if (btime != std::chrono::milliseconds(-1)) {
-                        search_time = std::chrono::milliseconds(std::min(btime.count() / 40, 10000L));
+                        search_time = std::chrono::milliseconds(std::min(btime.count() / 38, 10000L));
                     }
 
                     if (search_time.count() < 250) {
