@@ -76,8 +76,6 @@ protected:
                 int starting_depth = 6;
 
                 Move best_move;
-                int best_move_score;
-                int best_move_depth;
                 if (pos.turn() == WHITE) {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
@@ -91,7 +89,7 @@ protected:
                         starting_depth = 5;
                     }
 
-                    best_move = find_best_move<WHITE>(pos, search_time, starting_depth, pool, &best_move_score, &best_move_depth);
+                    best_move = find_best_move<WHITE>(this, pos, search_time, starting_depth, pool, nullptr, nullptr);
                 } else if (pos.turn() == BLACK) {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
@@ -105,11 +103,10 @@ protected:
                         starting_depth = 5;
                     }
 
-                    best_move = find_best_move<BLACK>(pos, search_time, starting_depth, pool, &best_move_score, &best_move_depth);
+                    best_move = find_best_move<BLACK>(this, pos, search_time, starting_depth, pool, nullptr, nullptr);
                 } else {
                     throw std::logic_error("Invalid side to move");
                 }
-                this->send_message("info", {"depth", std::to_string(best_move_depth), "score", "cp", std::to_string(best_move_score)});
                 this->move(best_move);
                 break;
             }

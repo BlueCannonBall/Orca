@@ -84,8 +84,21 @@ int evaluate(const Position& pos) {
         }
     }
 
+    // Check status
+    int cs = 0;
+    if (pos.in_check<Us>()) {
+        cs = -23;
+    } else if (pos.in_check<~Us>()) {
+        cs = 23;
+    }
+
+    // Pinned count
+    int pc = 0;
+    pc -= pop_count(pos.pinned & pos.all_pieces<Us>()) * 20;
+    pc += pop_count(pos.pinned & pos.all_pieces<~Us>()) * 20;
+
     // Sum up various scores
-    return mv + ca + cc + np + kp + pp;
+    return mv + ca + cc + np + kp + pp + cs + pc;
 }
 
 bool see(const Position& pos, Move move, int threshold) {
@@ -198,7 +211,7 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std:
     });
 
     for (const Move* move = moves; move != last_move; move++) {
-        if (depth == 2 && static_move_scores[move->from()][move->to()] <= alpha) {
+        if (depth <= 2 && static_move_scores[move->from()][move->to()] + 100 <= alpha) {
             break;
         }
 
@@ -253,6 +266,22 @@ int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::at
 
     Move moves[218];
     Move* last_move = pos.generate_legals<Us>(moves);
+    int static_move_scores[64][64] = {{0}};
+    int sort_scores[64][64] = {{0}};
+    for (const Move* move = moves; move != last_move; move++) {
+        if (move->is_capture()) {
+            pos.play<Us>(*move);
+            static_move_scores[move->from()][move->to()] = evaluate<Us>(pos);
+            pos.undo<Us>(*move);
+
+            sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
+        } else {
+            sort_scores[move->from()][move->to()] = -piece_values[KING] * 2;
+        }
+    }
+    std::sort(moves, last_move, [&sort_scores](Move a, Move b) {
+        return sort_scores[a.from()][a.to()] > sort_scores[b.from()][b.to()];
+    });
 
     if (moves == last_move) {
         if (pos.in_check<Us>()) {
@@ -264,10 +293,12 @@ int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::at
 
     for (const Move* move = moves; move != last_move; move++) {
         if (!move->is_capture()) {
-            continue;
+            break;
         }
 
-        if (piece_values[type_of(pos.at(move->to()))] + 200 <= alpha) {
+        if (static_move_scores[move->from()][move->to()] + 400 <= alpha) {
+            break;
+        } else if (piece_values[type_of(pos.at(move->to()))] + 200 <= alpha) {
             continue;
         }
 

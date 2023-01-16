@@ -1,6 +1,7 @@
 #include "surge/src/position.h"
 #include "surge/src/types.h"
 #include "threadpool.hpp"
+#include "uci.hpp"
 #include <atomic>
 #include <climits>
 #include <unordered_map>
@@ -46,11 +47,11 @@ template <Color Us>
 int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
 
 template <Color Us, typename DurationT>
-Move find_best_move(Position& pos, DurationT search_time, int starting_depth, tp::ThreadPool& pool, int* best_move_score_ret, int* best_move_depth_ret) {
+Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, int starting_depth, tp::ThreadPool& pool, int* best_move_score_ret, int* best_move_depth_ret) {
     MoveList<Us> moves(pos);
     if (moves.size() == 1) {
-        *best_move_score_ret = 0;
-        *best_move_depth_ret = 0;
+        if (best_move_score_ret) *best_move_score_ret = 0;
+        if (best_move_depth_ret) *best_move_depth_ret = 0;
         return *moves.begin();
     }
 
@@ -59,7 +60,7 @@ Move find_best_move(Position& pos, DurationT search_time, int starting_depth, tp
     int best_move_depth = 0;
     std::atomic<bool> stop(false);
 
-    std::thread deepening_thread([&pos, starting_depth, &pool, &moves, &best_move, &best_move_score, &best_move_depth, &stop]() {
+    std::thread deepening_thread([engine, &pos, starting_depth, &pool, &moves, &best_move, &best_move_score, &best_move_depth, &stop]() {
         std::vector<std::shared_ptr<tp::Task>> tasks;
         for (int current_depth = starting_depth; !stop && current_depth < 256; current_depth++) {
             std::mutex current_mtx;
@@ -96,6 +97,7 @@ Move find_best_move(Position& pos, DurationT search_time, int starting_depth, tp
                 best_move = current_best_move;
                 best_move_score = current_best_move_score;
                 best_move_depth = current_depth;
+                engine->send_message("info", {"depth", std::to_string(best_move_depth), "score", "cp", std::to_string(best_move_score)});
             }
         }
     });
@@ -105,7 +107,7 @@ Move find_best_move(Position& pos, DurationT search_time, int starting_depth, tp
     stop = true;
     deepening_thread.join();
 
-    *best_move_score_ret = best_move_score;
-    *best_move_depth_ret = best_move_depth;
+    if (best_move_score_ret) *best_move_score_ret = best_move_score;
+    if (best_move_depth_ret) *best_move_depth_ret = best_move_depth;
     return best_move;
 }
