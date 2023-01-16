@@ -16,6 +16,10 @@ public:
         pos(DEFAULT_FEN) { }
 
 protected:
+    void declare_options() override {
+        this->send_message("option", {"name", "UCI_Chess960", "type", "check", "default", "false"});
+    }
+
     void on_message(const std::string& command, const std::vector<std::string>& args) override {
         str_switch(command) {
             str_case("position") :
@@ -62,6 +66,8 @@ protected:
                 std::chrono::milliseconds movetime = std::chrono::milliseconds(-1);
                 std::chrono::milliseconds wtime = std::chrono::milliseconds(-1);
                 std::chrono::milliseconds btime = std::chrono::milliseconds(-1);
+                std::chrono::milliseconds winc = std::chrono::milliseconds(0);
+                std::chrono::milliseconds binc = std::chrono::milliseconds(0);
                 for (auto it = args.begin(); it != args.end(); it++) {
                     if (*it == "movetime") {
                         movetime = std::chrono::milliseconds(stoi(*++it));
@@ -69,6 +75,10 @@ protected:
                         wtime = std::chrono::milliseconds(stoi(*++it));
                     } else if (*it == "btime") {
                         btime = std::chrono::milliseconds(stoi(*++it));
+                    } else if (*it == "winc") {
+                        winc = std::chrono::milliseconds(stoi(*++it));
+                    } else if (*it == "binc") {
+                        binc = std::chrono::milliseconds(stoi(*++it));
                     }
                 }
 
@@ -83,6 +93,10 @@ protected:
                         search_time = std::chrono::milliseconds(std::min(wtime.count() / 38, 10000L));
                     }
 
+                    if (search_time - std::chrono::milliseconds(500) < winc) {
+                        search_time = winc - std::chrono::milliseconds(500);
+                    }
+
                     if (search_time.count() < 250) {
                         starting_depth = 4;
                     } else if (search_time.count() < 3000) {
@@ -95,6 +109,10 @@ protected:
                         search_time = movetime;
                     } else if (btime != std::chrono::milliseconds(-1)) {
                         search_time = std::chrono::milliseconds(std::min(btime.count() / 38, 10000L));
+                    }
+
+                    if (search_time - std::chrono::milliseconds(500) < binc) {
+                        search_time = binc - std::chrono::milliseconds(500);
                     }
 
                     if (search_time.count() < 250) {
@@ -128,6 +146,18 @@ protected:
                     this->send_message("score", {std::to_string(evaluate<WHITE>(pos))});
                 } else if (pos.turn() == BLACK) {
                     this->send_message("score", {std::to_string(evaluate<BLACK>(pos))});
+                } else {
+                    throw std::logic_error("Invalid side to move");
+                }
+                break;
+            }
+
+            str_case("see") :
+            {
+                if (pos.turn() == WHITE) {
+                    this->send_message("swapoff", {std::to_string(see<WHITE>(pos, create_square(File(args[0][0] - 'a'), Rank(args[0][1] - '1'))))});
+                } else if (pos.turn() == BLACK) {
+                    this->send_message("swapoff", {std::to_string(see<BLACK>(pos, create_square(File(args[0][0] - 'a'), Rank(args[0][1] - '1'))))});
                 } else {
                     throw std::logic_error("Invalid side to move");
                 }

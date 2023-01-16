@@ -24,11 +24,13 @@ class TTEntry {
 public:
     int score;
     int depth;
+    Move hash_move;
 
     TTEntry() = default;
-    TTEntry(int score, int depth) :
+    TTEntry(int score, int depth, Move hash_move = Move()) :
         score(score),
-        depth(depth) { }
+        depth(depth),
+        hash_move(hash_move) { }
 };
 
 typedef std::unordered_map<uint64_t, TTEntry> TT;
@@ -38,47 +40,51 @@ GameProgress get_progress(int mv1, int mv2);
 template <Color Us>
 int evaluate(const Position& pos);
 
-bool see(const Position& pos, Move move, int threshold);
+template <Color Us>
+int see(const Position& pos, Square sq);
 
 template <Color Us>
-int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
+int pvs(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
 
 template <Color Us>
 int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
 
 template <Color Us, typename DurationT>
 Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, int starting_depth, tp::ThreadPool& pool, int* best_move_score_ret = nullptr, int* best_move_depth_ret = nullptr) {
-    MoveList<Us> moves(pos);
-    if (moves.size() == 1) {
+    Move moves[218];
+    Move* last_move = pos.generate_legals<Us>(moves);
+    if (last_move - moves == 1) {
         if (best_move_score_ret) *best_move_score_ret = 0;
         if (best_move_depth_ret) *best_move_depth_ret = 0;
-        return *moves.begin();
+        return moves[0];
     }
+
+    std::vector<TT> tts(last_move - moves);
 
     Move best_move;
     int best_move_score = INT_MIN;
     int best_move_depth = 0;
     std::atomic<bool> stop(false);
 
-    std::thread deepening_thread([engine, &pos, starting_depth, &pool, &moves, &best_move, &best_move_score, &best_move_depth, &stop]() {
+    std::thread deepening_thread([engine, &pos, starting_depth, &pool, &moves, last_move, &tts, &best_move, &best_move_score, &best_move_depth, &stop]() {
         std::vector<std::shared_ptr<tp::Task>> tasks;
         for (int current_depth = starting_depth; !stop && current_depth < 256; current_depth++) {
             std::mutex current_mtx;
             Move current_best_move;
             int current_best_move_score = INT_MIN;
 
-            for (Move move : moves) {
-                tasks.push_back(pool.schedule([pos, current_depth, move, &current_mtx, &current_best_move, &current_best_move_score, &stop](void*) mutable {
-                    TT tt;
+            for (Move* move = moves; move != last_move; move++) {
+                tasks.push_back(pool.schedule([pos, &moves, &tts, current_depth, move, &current_mtx, &current_best_move, &current_best_move_score, &stop](void*) mutable {
+                    TT& tt = tts[move - moves];
 
-                    pos.play<Us>(move);
-                    int score = -alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, tt, stop);
-                    pos.undo<Us>(move);
+                    pos.play<Us>(*move);
+                    int score = -pvs<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, tt, stop);
+                    pos.undo<Us>(*move);
 
                     if (!stop) {
                         current_mtx.lock();
                         if (score > current_best_move_score) {
-                            current_best_move = move;
+                            current_best_move = *move;
                             current_best_move_score = score;
                         }
                         current_mtx.unlock();
@@ -103,7 +109,7 @@ Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, i
     });
 
     std::this_thread::sleep_for(search_time);
-    while (best_move_depth == 0) { std::this_thread::sleep_for(std::chrono::milliseconds(100)); }
+    while (best_move_depth == 0) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
     stop = true;
     deepening_thread.join();
 
