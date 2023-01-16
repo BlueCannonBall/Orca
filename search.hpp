@@ -47,7 +47,7 @@ template <Color Us>
 int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
 
 template <Color Us, typename DurationT>
-Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, int starting_depth, tp::ThreadPool& pool, int* best_move_score_ret, int* best_move_depth_ret) {
+Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, int starting_depth, tp::ThreadPool& pool, int* best_move_score_ret = nullptr, int* best_move_depth_ret = nullptr) {
     MoveList<Us> moves(pos);
     if (moves.size() == 1) {
         if (best_move_score_ret) *best_move_score_ret = 0;

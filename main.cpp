@@ -89,7 +89,7 @@ protected:
                         starting_depth = 5;
                     }
 
-                    best_move = find_best_move<WHITE>(this, pos, search_time, starting_depth, pool, nullptr, nullptr);
+                    best_move = find_best_move<WHITE>(this, pos, search_time, starting_depth, pool);
                 } else if (pos.turn() == BLACK) {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
@@ -103,7 +103,7 @@ protected:
                         starting_depth = 5;
                     }
 
-                    best_move = find_best_move<BLACK>(this, pos, search_time, starting_depth, pool, nullptr, nullptr);
+                    best_move = find_best_move<BLACK>(this, pos, search_time, starting_depth, pool);
                 } else {
                     throw std::logic_error("Invalid side to move");
                 }
