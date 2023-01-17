@@ -242,6 +242,9 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std:
             pos.undo<Us>(*move);
             sort_scores[move->from()][move->to()] += swapoff;
 
+            if (move->is_capture()) {
+                sort_scores[move->from()][move->to()] += 15;
+            }
             if (move->is_promotion()) {
                 sort_scores[move->from()][move->to()] += 30;
             }
