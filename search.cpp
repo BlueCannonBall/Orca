@@ -232,17 +232,15 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std:
         static_move_scores[move->from()][move->to()] = evaluate<Us>(pos);
         pos.undo<Us>(*move);
 
-        sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
-
         if (*move == hash_move) {
             sort_scores[move->from()][move->to()] += piece_values[KING] * 2;
         } else {
-            if (move->is_capture()) {
-                pos.play<Us>(*move);
-                int swapoff = -see<~Us>(pos, move->to());
-                pos.undo<Us>(*move);
-                sort_scores[move->from()][move->to()] += 15 + swapoff;
-            }
+            sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
+
+            pos.play<Us>(*move);
+            int swapoff = -see<~Us>(pos, move->to());
+            pos.undo<Us>(*move);
+            sort_scores[move->from()][move->to()] += swapoff;
 
             if (move->is_promotion()) {
                 sort_scores[move->from()][move->to()] += 30;
@@ -336,11 +334,11 @@ int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::at
             static_move_scores[move->from()][move->to()] = evaluate<Us>(pos);
             pos.undo<Us>(*move);
 
-            sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
-
             if (*move == hash_move) {
                 sort_scores[move->from()][move->to()] += piece_values[KING] * 2;
             } else {
+                sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
+
                 pos.play<Us>(*move);
                 int swapoff = -see<~Us>(pos, move->to());
                 pos.undo<Us>(*move);
