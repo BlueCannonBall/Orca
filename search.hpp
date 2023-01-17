@@ -60,13 +60,14 @@ Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, i
     }
 
     std::vector<TT> tts(last_move - moves);
+    std::vector<int> move_scores(last_move - moves, -piece_values[KING] * 2 - 1);
 
     Move best_move;
     int best_move_score = INT_MIN;
     int best_move_depth = 0;
     std::atomic<bool> stop(false);
 
-    std::thread deepening_thread([engine, &pos, starting_depth, &pool, &moves, last_move, &tts, &best_move, &best_move_score, &best_move_depth, &stop]() {
+    std::thread deepening_thread([engine, &pos, starting_depth, &pool, &moves, last_move, &tts, &move_scores, &best_move, &best_move_score, &best_move_depth, &stop]() {
         std::vector<std::shared_ptr<tp::Task>> tasks;
         for (int current_depth = starting_depth; !stop && current_depth < 256; current_depth++) {
             std::mutex current_mtx;
@@ -74,12 +75,21 @@ Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, i
             int current_best_move_score = INT_MIN;
 
             for (Move* move = moves; move != last_move; move++) {
-                tasks.push_back(pool.schedule([pos, &moves, &tts, current_depth, move, &current_mtx, &current_best_move, &current_best_move_score, &stop](void*) mutable {
+                tasks.push_back(pool.schedule([pos, &moves, &tts, &move_scores, current_depth, move, &current_mtx, &current_best_move, &current_best_move_score, &stop](void*) mutable {
                     TT& tt = tts[move - moves];
 
+                    int score;
                     pos.play<Us>(*move);
-                    int score = -alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, tt, stop);
+                    // if (move_scores[move - moves] == -piece_values[KING] * 2 - 1) {
+                        score = -alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, tt, stop);
+                    // } else {
+                    //     score = -alpha_beta<~Us>(pos, move_scores[move - moves] - 10, move_scores[move - moves] + 10, current_depth - 1, tt, stop);
+                    //     if (score <= move_scores[move - moves] - 10 || score >= move_scores[move - moves] + 10) {
+                    //         score = -alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, tt, stop);
+                    //     }
+                    // }
                     pos.undo<Us>(*move);
+                    // move_scores[move - moves] = score;
 
                     if (!stop) {
                         current_mtx.lock();

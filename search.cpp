@@ -34,15 +34,15 @@ int evaluate(const Position& pos) {
     // Center control
     int cc = 0;
     if (progress == MIDGAME) {
-        cc += (color_of(pos.at(d5)) == Us && type_of(pos.at(d5)) != KING) ? 25 : -25;
-        cc += (color_of(pos.at(e5)) == Us && type_of(pos.at(e5)) != KING) ? 25 : -25;
-        cc += (color_of(pos.at(d4)) == Us && type_of(pos.at(d4)) != KING) ? 25 : -25;
-        cc += (color_of(pos.at(e4)) == Us && type_of(pos.at(e4)) != KING) ? 25 : -25;
+        if (pos.at(d5) != NO_PIECE && type_of(pos.at(d5)) != KING) cc += (color_of(pos.at(d5)) == Us) ? 25 : -25;
+        if (pos.at(e5) != NO_PIECE && type_of(pos.at(e5)) != KING) cc += (color_of(pos.at(e5)) == Us) ? 25 : -25;
+        if (pos.at(d4) != NO_PIECE && type_of(pos.at(d4)) != KING) cc += (color_of(pos.at(d4)) == Us) ? 25 : -25;
+        if (pos.at(e4) != NO_PIECE && type_of(pos.at(e4)) != KING) cc += (color_of(pos.at(e4)) == Us) ? 25 : -25;
     } else if (progress == ENDGAME) {
-        cc += (color_of(pos.at(d5)) == Us) ? 25 : -25;
-        cc += (color_of(pos.at(e5)) == Us) ? 25 : -25;
-        cc += (color_of(pos.at(d4)) == Us) ? 25 : -25;
-        cc += (color_of(pos.at(e4)) == Us) ? 25 : -25;
+        if (pos.at(d5) != NO_PIECE) cc += (color_of(pos.at(d5)) == Us) ? 25 : -25;
+        if (pos.at(e5) != NO_PIECE) cc += (color_of(pos.at(e5)) == Us) ? 25 : -25;
+        if (pos.at(d4) != NO_PIECE) cc += (color_of(pos.at(d4)) == Us) ? 25 : -25;
+        if (pos.at(e4) != NO_PIECE) cc += (color_of(pos.at(e4)) == Us) ? 25 : -25;
     } else {
         throw std::logic_error("Invalid progress value");
     }
@@ -61,12 +61,12 @@ int evaluate(const Position& pos) {
     let table = [[], []];
     for (let y = 7; y > -1; y--) {
         for (let x = 0; x < 8; x++) {
-            table[0].push(Math.round(-Math.min(distance(x, y, 0, 7), distance(x, y, 7, 7)) * 4));
-            table[1].push(Math.round(-Math.min(distance(x, y, 0, 0), distance(x, y, 7, 0)) * 4));
+            table[0].push(Math.round(-Math.min(distance(x, y, 0, 7), distance(x, y, 7, 7)) * 10));
+            table[1].push(Math.round(-Math.min(distance(x, y, 0, 0), distance(x, y, 7, 0)) * 10));
         }
     }
     */
-    static constexpr int king_pcsq_table[2][64] = {{0, -4, -8, -12, -12, -8, -4, 0, -4, -6, -9, -13, -13, -9, -6, -4, -8, -9, -11, -14, -14, -11, -9, -8, -12, -13, -14, -17, -17, -14, -13, -12, -16, -16, -18, -20, -20, -18, -16, -16, -20, -20, -22, -23, -23, -22, -20, -20, -24, -24, -25, -27, -27, -25, -24, -24, -28, -28, -29, -30, -30, -29, -28, -28}, {-28, -28, -29, -30, -30, -29, -28, -28, -24, -24, -25, -27, -27, -25, -24, -24, -20, -20, -22, -23, -23, -22, -20, -20, -16, -16, -18, -20, -20, -18, -16, -16, -12, -13, -14, -17, -17, -14, -13, -12, -8, -9, -11, -14, -14, -11, -9, -8, -4, -6, -9, -13, -13, -9, -6, -4, 0, -4, -8, -12, -12, -8, -4, 0}};
+    static constexpr int king_pcsq_table[2][64] = {{0, -15, -30, -45, -45, -30, -15, 0, -15, -21, -34, -47, -47, -34, -21, -15, -30, -34, -42, -54, -54, -42, -34, -30, -45, -47, -54, -64, -64, -54, -47, -45, -60, -62, -67, -75, -75, -67, -62, -60, -75, -76, -81, -87, -87, -81, -76, -75, -90, -91, -95, -101, -101, -95, -91, -90, -105, -106, -109, -114, -114, -109, -106, -105}, {-105, -106, -109, -114, -114, -109, -106, -105, -90, -91, -95, -101, -101, -95, -91, -90, -75, -76, -81, -87, -87, -81, -76, -75, -60, -62, -67, -75, -75, -67, -62, -60, -45, -47, -54, -64, -64, -54, -47, -45, -30, -34, -42, -54, -54, -42, -34, -30, -15, -21, -34, -47, -47, -34, -21, -15, 0, -15, -30, -45, -45, -30, -15, 0}};
     int kp = 0;
     kp += king_pcsq_table[Us][bsf(pos.bitboard_of(Us, KING))];
     kp -= king_pcsq_table[~Us][bsf(pos.bitboard_of(~Us, KING))];
@@ -94,10 +94,18 @@ int evaluate(const Position& pos) {
 
     // Pinned count
     int pc = 0;
-    pc -= pop_count(pos.pinned & pos.all_pieces<Us>()) * 20;
-    pc += pop_count(pos.pinned & pos.all_pieces<~Us>()) * 20;
+    pc -= pop_count(pos.pinned & pos.all_pieces<Us>()) * 10;
+    pc += pop_count(pos.pinned & pos.all_pieces<~Us>()) * 10;
 
     // Sum up various scores
+    // std::cout << "Material value: " << mv << std::endl;
+    // std::cout << "Color advantage: " << ca << std::endl;
+    // std::cout << "Center control: " << cc << std::endl;
+    // std::cout << "Knight placement: " << np << std::endl;
+    // std::cout << "King placement: " << kp << std::endl;
+    // std::cout << "Pawn placement: " << pp << std::endl;
+    // std::cout << "Check status: " << cs << std::endl;
+    // std::cout << "Pinned count: " << pc << std::endl;
     return mv + ca + cc + np + kp + pp + cs + pc;
 }
 
@@ -259,17 +267,33 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std:
             break;
         }
 
-        pos.play<Us>(*move);
+        int score;
         int reduced_depth = depth - 1;
         if (move - moves > 4 && depth > 3) {
             reduced_depth -= 2;
         }
-        int score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth, tt, stop);
+        pos.play<Us>(*move);
+        // if (hash_move == Move() || *move == hash_move) {
+        score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth, tt, stop);
+        // } else {
+        //     score = -alpha_beta<~Us>(pos, -alpha - 1, -alpha, reduced_depth, tt, stop);
+        //     if (score > alpha) {
+        //         score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth, tt, stop);
+        //     }
+        // }
         pos.undo<Us>(*move);
 
         if (stop) {
             return alpha;
         } else if (score >= beta) {
+            hash_move = *move;
+            if (entry_it != tt.end()) {
+                entry_it->second.score = beta;
+                entry_it->second.depth = depth;
+                entry_it->second.hash_move = hash_move;
+            } else {
+                tt[pos.get_hash()] = TTEntry(beta, depth, hash_move);
+            }
             return beta;
         } else if (score > alpha) {
             hash_move = *move;
@@ -301,6 +325,13 @@ int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::at
 
     int stand_pat = evaluate<Us>(pos);
     if (stand_pat >= beta) {
+        if (entry_it != tt.end()) {
+            entry_it->second.score = beta;
+            entry_it->second.depth = depth;
+            entry_it->second.hash_move = hash_move;
+        } else {
+            tt[pos.get_hash()] = TTEntry(beta, depth, hash_move);
+        }
         return beta;
     } else if (alpha < stand_pat) {
         alpha = stand_pat;
@@ -377,6 +408,14 @@ int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::at
         if (stop) {
             return alpha;
         } else if (score >= beta) {
+            hash_move = *move;
+            if (entry_it != tt.end()) {
+                entry_it->second.score = beta;
+                entry_it->second.depth = depth;
+                entry_it->second.hash_move = hash_move;
+            } else {
+                tt[pos.get_hash()] = TTEntry(beta, depth, hash_move);
+            }
             return beta;
         } else if (score > alpha) {
             alpha = score;
