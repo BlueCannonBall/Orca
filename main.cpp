@@ -1,3 +1,4 @@
+#include "evaluation.hpp"
 #include "search.hpp"
 #include "surge/src/position.h"
 #include "surge/src/types.h"

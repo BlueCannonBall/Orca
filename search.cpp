@@ -1,237 +1,58 @@
 #include "search.hpp"
+#include "evaluation.hpp"
 #include "surge/src/types.h"
-#include "util.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <climits>
 #include <cmath>
 
-GameProgress get_progress(int mv1, int mv2) {
-    return (mv1 <= 1300 && mv2 <= 1300) ? ENDGAME : MIDGAME;
-}
-
 template <Color Us>
-int evaluate(const Position& pos) {
-    // Material value
-    int mv = 0;
-    int our_mv = 0;
-    int their_mv = 0;
-    for (size_t i = 0; i < NPIECE_TYPES - 1; i++) {
-        our_mv += pop_count(pos.bitboard_of(Us, (PieceType) i)) * piece_values[i];
-        their_mv += pop_count(pos.bitboard_of(~Us, (PieceType) i)) * piece_values[i];
-    }
-    mv += our_mv;
-    mv -= their_mv;
-    GameProgress progress = get_progress(our_mv, their_mv);
-
-    // Color advantage
-    int ca = 0;
-    if (progress == MIDGAME) {
-        ca = (Us == WHITE) ? 15 : -15;
+int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMoves& killer_moves, const std::atomic<bool>& stop) {
+    if (stop) {
+        return 0;
     }
 
-    // Center control
-    int cc = 0;
-    if (progress == MIDGAME) {
-        if (pos.at(d5) != NO_PIECE && type_of(pos.at(d5)) != KING) cc += (color_of(pos.at(d5)) == Us) ? 25 : -25;
-        if (pos.at(e5) != NO_PIECE && type_of(pos.at(e5)) != KING) cc += (color_of(pos.at(e5)) == Us) ? 25 : -25;
-        if (pos.at(d4) != NO_PIECE && type_of(pos.at(d4)) != KING) cc += (color_of(pos.at(d4)) == Us) ? 25 : -25;
-        if (pos.at(e4) != NO_PIECE && type_of(pos.at(e4)) != KING) cc += (color_of(pos.at(e4)) == Us) ? 25 : -25;
-    } else if (progress == ENDGAME) {
-        if (pos.at(d5) != NO_PIECE) cc += (color_of(pos.at(d5)) == Us) ? 25 : -25;
-        if (pos.at(e5) != NO_PIECE) cc += (color_of(pos.at(e5)) == Us) ? 25 : -25;
-        if (pos.at(d4) != NO_PIECE) cc += (color_of(pos.at(d4)) == Us) ? 25 : -25;
-        if (pos.at(e4) != NO_PIECE) cc += (color_of(pos.at(e4)) == Us) ? 25 : -25;
-    } else {
-        throw std::logic_error("Invalid progress value");
-    }
-
-    // Knight placement
-    int np = 0;
-    np -= pop_count(pos.bitboard_of(Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
-    np += pop_count(pos.bitboard_of(~Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
-
-    // King placement
-    /*
-    function distance(x1, y1, x2, y2) {
-        return Math.hypot(x2 - x1, y2 - y1);
-    }
-
-    let table = [[], []];
-    for (let y = 7; y > -1; y--) {
-        for (let x = 0; x < 8; x++) {
-            table[0].push(Math.round(-Math.min(distance(x, y, 0, 7), distance(x, y, 7, 7)) * 10));
-            table[1].push(Math.round(-Math.min(distance(x, y, 0, 0), distance(x, y, 7, 0)) * 10));
-        }
-    }
-    */
-    static constexpr int king_pcsq_table[2][64] = {{0, -15, -30, -45, -45, -30, -15, 0, -15, -21, -34, -47, -47, -34, -21, -15, -30, -34, -42, -54, -54, -42, -34, -30, -45, -47, -54, -64, -64, -54, -47, -45, -60, -62, -67, -75, -75, -67, -62, -60, -75, -76, -81, -87, -87, -81, -76, -75, -90, -91, -95, -101, -101, -95, -91, -90, -105, -106, -109, -114, -114, -109, -106, -105}, {-105, -106, -109, -114, -114, -109, -106, -105, -90, -91, -95, -101, -101, -95, -91, -90, -75, -76, -81, -87, -87, -81, -76, -75, -60, -62, -67, -75, -75, -67, -62, -60, -45, -47, -54, -64, -64, -54, -47, -45, -30, -34, -42, -54, -54, -42, -34, -30, -15, -21, -34, -47, -47, -34, -21, -15, 0, -15, -30, -45, -45, -30, -15, 0}};
-    int kp = 0;
-    kp += king_pcsq_table[Us][bsf(pos.bitboard_of(Us, KING))];
-    kp -= king_pcsq_table[~Us][bsf(pos.bitboard_of(~Us, KING))];
-
-    // Pawn placement
-    int pp = 0;
-    for (int file = AFILE; file < HFILE; file++) {
-        int our_pawn_count = sparse_pop_count(pos.bitboard_of(Us, PAWN) & MASK_FILE[file]);
-        int their_pawn_count = sparse_pop_count(pos.bitboard_of(~Us, PAWN) & MASK_FILE[file]);
-        if (our_pawn_count > 1) {
-            pp -= (our_pawn_count - 1) * 75;
-        }
-        if (their_pawn_count > 1) {
-            pp += (their_pawn_count - 1) * 75;
-        }
-    }
-
-    // Check status
-    int cs = 0;
-    if (pos.in_check<Us>()) {
-        cs = -20;
-    } else if (pos.in_check<~Us>()) {
-        cs = 20;
-    }
-
-    // Pinned count
-    int pc = 0;
-    pc -= pop_count(pos.pinned & pos.all_pieces<Us>()) * 10;
-    pc += pop_count(pos.pinned & pos.all_pieces<~Us>()) * 10;
-
-    // Sum up various scores
-    // std::cout << "Material value: " << mv << std::endl;
-    // std::cout << "Color advantage: " << ca << std::endl;
-    // std::cout << "Center control: " << cc << std::endl;
-    // std::cout << "Knight placement: " << np << std::endl;
-    // std::cout << "King placement: " << kp << std::endl;
-    // std::cout << "Pawn placement: " << pp << std::endl;
-    // std::cout << "Check status: " << cs << std::endl;
-    // std::cout << "Pinned count: " << pc << std::endl;
-    return mv + ca + cc + np + kp + pp + cs + pc;
-}
-
-template <Color Us>
-int see(const Position& pos, Square sq) {
-    Bitboard occ = BOTH_COLOR_CALL(pos.all_pieces);
-    Bitboard attackers = BOTH_COLOR_CALL(pos.attackers_from, sq, occ);
-    Bitboard diagonal_sliders = BOTH_COLOR_CALL(pos.diagonal_sliders);
-    Bitboard orthogonal_sliders = BOTH_COLOR_CALL(pos.orthogonal_sliders);
-
-    int ret = 0;
-    int sq_occ = (pos.at(sq) == NO_PIECE) ? -1 : type_of(pos.at(sq));
-    for (;;) {
-        {
-            bool attacked = false;
-            for (size_t attacker_pc = PAWN; attacker_pc < NPIECE_TYPES; attacker_pc++) {
-                Bitboard attacker = attackers & pos.bitboard_of(Us, (PieceType) attacker_pc);
-                if (attacker) {
-                    if (sq_occ != -1) {
-                        ret += piece_values[sq_occ];
-                    }
-
-                    Square attacker_sq = bsf(attacker);
-                    occ ^= SQUARE_BB[attacker_sq];
-                    attackers ^= SQUARE_BB[attacker_sq];
-                    sq_occ = attacker_pc;
-
-                    if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
-                        diagonal_sliders ^= SQUARE_BB[attacker_sq];
-                        attackers |= attacks<BISHOP>(sq, occ) & diagonal_sliders;
-                    }
-                    if (attacker_pc == ROOK || attacker_pc == QUEEN) {
-                        orthogonal_sliders ^= SQUARE_BB[attacker_sq];
-                        attackers |= attacks<ROOK>(sq, occ) & orthogonal_sliders;
-                    }
-
-                    attacked = true;
-                    break;
-                }
-            }
-            if (!attacked) {
-                break;
-            }
-        }
-
-        {
-            bool attacked = false;
-            for (size_t attacker_pc = PAWN; attacker_pc < NPIECE_TYPES; attacker_pc++) {
-                Bitboard attacker = attackers & pos.bitboard_of(~Us, (PieceType) attacker_pc);
-                if (attacker) {
-                    if (sq_occ != -1) {
-                        ret -= piece_values[sq_occ];
-                    }
-
-                    Square attacker_sq = bsf(attacker);
-                    occ ^= SQUARE_BB[attacker_sq];
-                    attackers ^= SQUARE_BB[attacker_sq];
-                    sq_occ = attacker_pc;
-
-                    if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
-                        diagonal_sliders ^= SQUARE_BB[attacker_sq];
-                        attackers |= attacks<BISHOP>(sq, occ) & diagonal_sliders;
-                    }
-                    if (attacker_pc == ROOK || attacker_pc == QUEEN) {
-                        orthogonal_sliders ^= SQUARE_BB[attacker_sq];
-                        attackers |= attacks<ROOK>(sq, occ) & orthogonal_sliders;
-                    }
-
-                    attacked = true;
-                    break;
-                }
-            }
-            if (!attacked) {
-                break;
-            }
-        }
-    }
-
-    return ret;
-}
-
-template <Color Us>
-int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop) {
-    TT::iterator entry_it = tt.find(pos.get_hash());
     Move hash_move;
-    if (entry_it != tt.end()) {
+    TT::iterator entry_it;
+    if ((entry_it = tt.find(pos.get_hash())) != tt.end()) {
         if (entry_it->second.depth >= depth) {
-            return entry_it->second.score;
-        } else if (entry_it->second.depth > 0) {
-            hash_move = entry_it->second.hash_move;
+            if (entry_it->second.flag == EXACT) {
+                return entry_it->second.score;
+            } else if (entry_it->second.flag == LOWERBOUND) {
+                alpha = std::max(alpha, entry_it->second.score);
+            } else if (entry_it->second.flag == UPPERBOUND) {
+                beta = std::min(beta, entry_it->second.score);
+            }
+
+            if (alpha >= beta) {
+                return entry_it->second.score;
+            }
         }
+        hash_move = entry_it->second.best_move;
     }
 
     if (depth == 0) {
-        int score = quiesce<Us>(pos, alpha, beta, depth - 1, tt, stop);
-        if (entry_it != tt.end()) {
-            entry_it->second.score = score;
-            entry_it->second.depth = depth;
-        } else {
-            tt[pos.get_hash()] = TTEntry(score, depth);
-        }
-        return score;
+        return quiesce<Us>(pos, alpha, beta, depth - 1, tt, killer_moves, stop);
     }
+
+    // Null move heuristic    
+    // if (depth > 3 && !pos.in_check<Us>() && has_non_pawn_material(pos, Us)) {
+    //     pos.play<Us>(Move());
+    //     int score = -alpha_beta<~Us>(pos, -beta, -alpha, depth - 3, tt, killer_moves, stop);
+    //     pos.undo<Us>(Move());
+
+    //     if (stop) {
+    //         return 0;
+    //     }
+
+    //     if (score >= beta) {
+    //         return beta;
+    //     }
+    // }
 
     Move moves[218];
     Move* last_move = pos.generate_legals<Us>(moves);
-
-    if (moves == last_move) {
-        if (pos.in_check<Us>()) {
-            if (entry_it != tt.end()) {
-                entry_it->second.score = alpha;
-                entry_it->second.depth = -piece_values[KING] - depth;
-            } else {
-                tt[pos.get_hash()] = TTEntry(alpha, -piece_values[KING] - depth);
-            }
-            return -piece_values[KING] - depth;
-        } else {
-            if (entry_it != tt.end()) {
-                entry_it->second.score = alpha;
-                entry_it->second.depth = 0;
-            } else {
-                tt[pos.get_hash()] = TTEntry(alpha, 0);
-            }
-            return 0;
-        }
-    }
 
     int static_move_scores[64][64] = {{0}};
     int sort_scores[64][64] = {{0}};
@@ -243,6 +64,18 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std:
         if (*move == hash_move) {
             sort_scores[move->from()][move->to()] += piece_values[KING] * 2;
         } else {
+            bool is_killer = false;
+            for (unsigned char i = 0; i < 3; i++) {
+                if (*move == killer_moves[Us][depth][i]) {
+                    is_killer = true;
+                    break;
+                }
+            }
+            if (is_killer) {
+                sort_scores[move->from()][move->to()] += piece_values[KING];
+                continue;
+            }
+
             sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
 
             pos.play<Us>(*move);
@@ -250,6 +83,9 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std:
             pos.undo<Us>(*move);
             sort_scores[move->from()][move->to()] += swapoff;
 
+            if (move->is_castling()) {
+                sort_scores[move->from()][move->to()] += 5;
+            }
             if (move->is_capture()) {
                 sort_scores[move->from()][move->to()] += 15;
             }
@@ -262,79 +98,98 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, const std:
         return sort_scores[a.from()][a.to()] > sort_scores[b.from()][b.to()];
     });
 
+    Move best_move;
+    TTEntryFlag flag = UPPERBOUND;
     for (const Move* move = moves; move != last_move; move++) {
         if (depth <= 2 && static_move_scores[move->from()][move->to()] + 100 <= alpha) {
             break;
         }
 
-        int score;
-        int reduced_depth = depth - 1;
-        if (move - moves > 4 && depth > 3) {
+        int reduced_depth = depth;
+        if (move - moves > 4 && depth > 2) {
             reduced_depth -= 2;
         }
-        pos.play<Us>(*move);
-        // if (hash_move == Move() || *move == hash_move) {
-        score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth, tt, stop);
+
+        // PVS
+        // pos.play<Us>(*move);
+        // int score;
+        // if (hash_move.is_null() || *move == hash_move) {
+        //     score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
         // } else {
-        //     score = -alpha_beta<~Us>(pos, -alpha - 1, -alpha, reduced_depth, tt, stop);
+        //     score = -alpha_beta<~Us>(pos, -alpha - 1, -alpha, reduced_depth - 1, tt, killer_moves, stop);
         //     if (score > alpha) {
-        //         score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth, tt, stop);
+        //         score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
         //     }
         // }
+        // pos.undo<Us>(*move);
+
+        pos.play<Us>(*move);
+        int score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
         pos.undo<Us>(*move);
 
         if (stop) {
-            return alpha;
-        } else if (score >= beta) {
-            hash_move = *move;
-            if (entry_it != tt.end()) {
-                entry_it->second.score = beta;
-                entry_it->second.depth = depth;
-                entry_it->second.hash_move = hash_move;
-            } else {
-                tt[pos.get_hash()] = TTEntry(beta, depth, hash_move);
+            return 0;
+        }
+
+        if (score > alpha) {
+            best_move = *move;
+            if (score >= beta) {
+                if (move->flags() == QUIET) {
+                    killer_moves[Us][depth][2] = killer_moves[Us][depth][1];
+                    killer_moves[Us][depth][1] = killer_moves[Us][depth][0];
+                    killer_moves[Us][depth][0] = *move;
+                }
+                flag = LOWERBOUND;
+                alpha = beta;
+                break;
             }
-            return beta;
-        } else if (score > alpha) {
-            hash_move = *move;
+            flag = EXACT;
             alpha = score;
         }
     }
 
-    if (entry_it != tt.end()) {
-        entry_it->second.score = alpha;
-        entry_it->second.depth = depth;
-        entry_it->second.hash_move = hash_move;
-    } else {
-        tt[pos.get_hash()] = TTEntry(alpha, depth, hash_move);
+    if (moves == last_move) {
+        if (pos.in_check<Us>()) {
+            alpha = -piece_values[KING] - depth;
+        } else {
+            alpha = 0;
+        }
+    } else if (best_move.is_null()) {
+        best_move = moves[0];
     }
+
+    if (!stop) {
+        if (entry_it != tt.end()) {
+            entry_it->second.score = alpha;
+            entry_it->second.depth = depth;
+            entry_it->second.best_move = best_move;
+            entry_it->second.flag = flag;
+        } else {
+            TTEntry entry(alpha, depth, best_move, flag);
+            tt[pos.get_hash()] = entry;
+        }
+    }
+
     return alpha;
 }
 
 template <Color Us>
-int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop) {
-    TT::iterator entry_it = tt.find(pos.get_hash());
-    Move hash_move;
-    if (entry_it != tt.end()) {
-        if (entry_it->second.depth >= depth) {
-            return entry_it->second.score;
-        } else {
-            hash_move = entry_it->second.hash_move;
-        }
+int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const KillerMoves& killer_moves, const std::atomic<bool>& stop) {
+    if (stop) {
+        return 0;
     }
 
     int stand_pat = evaluate<Us>(pos);
     if (stand_pat >= beta) {
-        if (entry_it != tt.end()) {
-            entry_it->second.score = beta;
-            entry_it->second.depth = depth;
-            entry_it->second.hash_move = hash_move;
-        } else {
-            tt[pos.get_hash()] = TTEntry(beta, depth, hash_move);
-        }
         return beta;
     } else if (alpha < stand_pat) {
         alpha = stand_pat;
+    }
+
+    Move hash_move;
+    TT::const_iterator entry_it;
+    if ((entry_it = tt.find(pos.get_hash())) != tt.end()) {
+        hash_move = entry_it->second.best_move;
     }
 
     Move moves[218];
@@ -342,20 +197,8 @@ int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::at
 
     if (moves == last_move) {
         if (pos.in_check<Us>()) {
-            if (entry_it != tt.end()) {
-                entry_it->second.score = alpha;
-                entry_it->second.depth = -piece_values[KING] - depth;
-            } else {
-                tt[pos.get_hash()] = TTEntry(alpha, -piece_values[KING] - depth);
-            }
             return -piece_values[KING] - depth;
         } else {
-            if (entry_it != tt.end()) {
-                entry_it->second.score = alpha;
-                entry_it->second.depth = 0;
-            } else {
-                tt[pos.get_hash()] = TTEntry(alpha, 0);
-            }
             return 0;
         }
     }
@@ -402,45 +245,26 @@ int quiesce(Position& pos, int alpha, int beta, int depth, TT& tt, const std::at
         }
 
         pos.play<Us>(*move);
-        int score = -quiesce<~Us>(pos, -beta, -alpha, depth - 1, tt, stop);
+        int score = -quiesce<~Us>(pos, -beta, -alpha, depth - 1, tt, killer_moves, stop);
         pos.undo<Us>(*move);
 
         if (stop) {
-            return alpha;
-        } else if (score >= beta) {
-            hash_move = *move;
-            if (entry_it != tt.end()) {
-                entry_it->second.score = beta;
-                entry_it->second.depth = depth;
-                entry_it->second.hash_move = hash_move;
-            } else {
-                tt[pos.get_hash()] = TTEntry(beta, depth, hash_move);
+            return 0;
+        }
+
+        if (score > alpha) {
+            if (score >= beta) {
+                return beta;
             }
-            return beta;
-        } else if (score > alpha) {
             alpha = score;
-            hash_move = *move;
         }
     }
 
-    if (entry_it != tt.end()) {
-        entry_it->second.score = alpha;
-        entry_it->second.depth = depth;
-        entry_it->second.hash_move = hash_move;
-    } else {
-        tt[pos.get_hash()] = TTEntry(alpha, depth, hash_move);
-    }
     return alpha;
 }
 
-template int evaluate<WHITE>(const Position& pos);
-template int evaluate<BLACK>(const Position& pos);
+template int alpha_beta<WHITE>(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMoves& killer_moves, const std::atomic<bool>& stop);
+template int alpha_beta<BLACK>(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMoves& killer_moves, const std::atomic<bool>& stop);
 
-template int see<WHITE>(const Position& pos, Square sq);
-template int see<BLACK>(const Position& pos, Square sq);
-
-template int alpha_beta<WHITE>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
-template int alpha_beta<BLACK>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
-
-template int quiesce<WHITE>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
-template int quiesce<BLACK>(Position& pos, int alpha, int beta, int depth, TT& tt, const std::atomic<bool>& stop);
+template int quiesce<WHITE>(Position& pos, int alpha, int beta, int depth, const TT& tt, const KillerMoves& killer_moves, const std::atomic<bool>& stop);
+template int quiesce<BLACK>(Position& pos, int alpha, int beta, int depth, const TT& tt, const KillerMoves& killer_moves, const std::atomic<bool>& stop);

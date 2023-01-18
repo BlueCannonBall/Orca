@@ -1,5 +1,18 @@
 #include "util.hpp"
 
+GameProgress get_progress(int mv1, int mv2) {
+    return (mv1 <= 1300 && mv2 <= 1300) ? ENDGAME : MIDGAME;
+}
+
+bool has_non_pawn_material(const Position& pos, Color c) {
+    for (size_t i = 1; i < NPIECE_TYPES - 1; i++) {
+        if (pos.bitboard_of(c, (PieceType) i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 template <>
 MoveFlags generate_move_flags<WHITE>(const Position& pos, Square from, Square to) {
     if (pos.at(to) != NO_PIECE) {
