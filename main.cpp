@@ -154,18 +154,6 @@ protected:
                 }
                 break;
             }
-
-            str_case("see") :
-            {
-                if (pos.turn() == WHITE) {
-                    this->send_message("swapoff", {std::to_string(see<WHITE>(pos, create_square(File(args[0][0] - 'a'), Rank(args[0][1] - '1'))))});
-                } else if (pos.turn() == BLACK) {
-                    this->send_message("swapoff", {std::to_string(see<BLACK>(pos, create_square(File(args[0][0] - 'a'), Rank(args[0][1] - '1'))))});
-                } else {
-                    throw std::logic_error("Invalid side to move");
-                }
-                break;
-            }
         }
     }
 };
