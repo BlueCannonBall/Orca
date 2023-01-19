@@ -119,7 +119,7 @@ int see(const Position& pos, Square sq) {
                     sq_occ = attacker_pc;
 
                     if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
-                        if (attacker_pc != PAWN) {
+                        if (attacker_pc == BISHOP || attacker_pc == QUEEN) {
                             diagonal_sliders ^= SQUARE_BB[attacker_sq];
                         }
                         attackers |= attacks<BISHOP>(sq, occ) & diagonal_sliders;
