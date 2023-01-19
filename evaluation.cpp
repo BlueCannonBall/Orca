@@ -48,18 +48,19 @@ int evaluate(const Position& pos) {
         return Math.hypot(x2 - x1, y2 - y1);
     }
 
-    let table = [[], []];
+    let table = [];
     for (let y = 7; y > -1; y--) {
         for (let x = 0; x < 8; x++) {
-            table[0].push(Math.round(-Math.min(distance(x, y, 0, 7), distance(x, y, 7, 7)) * 10));
-            table[1].push(Math.round(-Math.min(distance(x, y, 0, 0), distance(x, y, 7, 0)) * 10));
+            table.push(Math.round(distance(x, y, 3.5, 3.5) * 20));
         }
     }
     */
-    static constexpr int king_pcsq_table[2][64] = {{0, -15, -30, -45, -45, -30, -15, 0, -15, -21, -34, -47, -47, -34, -21, -15, -30, -34, -42, -54, -54, -42, -34, -30, -45, -47, -54, -64, -64, -54, -47, -45, -60, -62, -67, -75, -75, -67, -62, -60, -75, -76, -81, -87, -87, -81, -76, -75, -90, -91, -95, -101, -101, -95, -91, -90, -105, -106, -109, -114, -114, -109, -106, -105}, {-105, -106, -109, -114, -114, -109, -106, -105, -90, -91, -95, -101, -101, -95, -91, -90, -75, -76, -81, -87, -87, -81, -76, -75, -60, -62, -67, -75, -75, -67, -62, -60, -45, -47, -54, -64, -64, -54, -47, -45, -30, -34, -42, -54, -54, -42, -34, -30, -15, -21, -34, -47, -47, -34, -21, -15, 0, -15, -30, -45, -45, -30, -15, 0}};
+    static constexpr int king_pcsq_table[64] = {99, 86, 76, 71, 71, 76, 86, 99, 86, 71, 58, 51, 51, 58, 71, 86, 76, 58, 42, 32, 32, 42, 58, 76, 71, 51, 32, 14, 14, 32, 51, 71, 71, 51, 32, 14, 14, 32, 51, 71, 76, 58, 42, 32, 32, 42, 58, 76, 86, 71, 58, 51, 51, 58, 71, 86, 99, 86, 76, 71, 71, 76, 86, 99};
     int kp = 0;
-    kp += king_pcsq_table[Us][bsf(pos.bitboard_of(Us, KING))];
-    kp -= king_pcsq_table[~Us][bsf(pos.bitboard_of(~Us, KING))];
+    if (progress == MIDGAME) {
+        kp += king_pcsq_table[bsf(pos.bitboard_of(Us, KING))];
+        kp -= king_pcsq_table[bsf(pos.bitboard_of(~Us, KING))];
+    }
 
     // Pawn placement
     int pp = 0;
@@ -118,7 +119,9 @@ int see(const Position& pos, Square sq) {
                     sq_occ = attacker_pc;
 
                     if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
-                        diagonal_sliders ^= SQUARE_BB[attacker_sq];
+                        if (attacker_pc != PAWN) {
+                            diagonal_sliders ^= SQUARE_BB[attacker_sq];
+                        }
                         attackers |= attacks<BISHOP>(sq, occ) & diagonal_sliders;
                     }
                     if (attacker_pc == ROOK || attacker_pc == QUEEN) {

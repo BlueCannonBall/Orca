@@ -36,8 +36,19 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
         return quiesce<Us>(pos, alpha, beta, depth - 1, tt, killer_moves, stop);
     }
 
-    // Null move heuristic    
-    // if (depth > 3 && !pos.in_check<Us>() && has_non_pawn_material(pos, Us)) {
+    bool is_pv = alpha != beta - 1;
+    bool in_check = pos.in_check<Us>();
+
+    // Reverse futility pruning
+    if (depth <= 8 && !in_check && !is_pv) {
+        int evaluation = evaluate<Us>(pos);
+        if (evaluation - (120 * depth) >= beta) {
+            return evaluation;
+        }
+    }
+
+    // Null move heuristic
+    // if (!is_pv && depth > 3 && !in_check && has_non_pawn_material(pos, Us)) {
     //     pos.play<Us>(Move());
     //     int score = -alpha_beta<~Us>(pos, -beta, -alpha, depth - 3, tt, killer_moves, stop);
     //     pos.undo<Us>(Move());
@@ -101,31 +112,37 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
     Move best_move;
     TTEntryFlag flag = UPPERBOUND;
     for (const Move* move = moves; move != last_move; move++) {
-        if (depth <= 2 && static_move_scores[move->from()][move->to()] + 100 <= alpha) {
+        // Futility pruning
+        if (depth == 1 && !move->is_capture() && !in_check && static_move_scores[move->from()][move->to()] + 200 <= alpha) {
+            continue;
+        }
+        // Razoring
+        if (depth == 2 && static_move_scores[move->from()][move->to()] <= alpha) {
             break;
         }
 
+        // Late move reduction
         int reduced_depth = depth;
         if (move - moves > 4 && depth > 2) {
             reduced_depth -= 2;
         }
 
         // PVS
-        // pos.play<Us>(*move);
-        // int score;
-        // if (hash_move.is_null() || *move == hash_move) {
-        //     score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
-        // } else {
-        //     score = -alpha_beta<~Us>(pos, -alpha - 1, -alpha, reduced_depth - 1, tt, killer_moves, stop);
-        //     if (score > alpha) {
-        //         score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
-        //     }
-        // }
-        // pos.undo<Us>(*move);
-
         pos.play<Us>(*move);
-        int score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
+        int score;
+        if (hash_move.is_null() || *move == hash_move) {
+            score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
+        } else {
+            score = -alpha_beta<~Us>(pos, -alpha - 1, -alpha, reduced_depth - 1, tt, killer_moves, stop);
+            if (score > alpha) {
+                score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
+            }
+        }
         pos.undo<Us>(*move);
+
+        // pos.play<Us>(*move);
+        // int score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
+        // pos.undo<Us>(*move);
 
         if (stop) {
             return 0;
@@ -149,7 +166,7 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
     }
 
     if (moves == last_move) {
-        if (pos.in_check<Us>()) {
+        if (in_check) {
             alpha = -piece_values[KING] - depth;
         } else {
             alpha = 0;
@@ -238,9 +255,8 @@ int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const K
             break;
         }
 
-        if (static_move_scores[move->from()][move->to()] + 400 <= alpha) {
-            break;
-        } else if (piece_values[type_of(pos.at(move->to()))] + 200 <= alpha) {
+        // Delta pruning
+        if (piece_values[type_of(pos.at(move->to()))] + 200 <= alpha) {
             continue;
         }
 
