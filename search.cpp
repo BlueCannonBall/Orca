@@ -64,11 +64,11 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
     Move moves[218];
     Move* last_move = pos.generate_legals<Us>(moves);
 
-    int static_move_scores[64][64] = {{0}};
+    int move_evaluations[64][64] = {{0}};
     int sort_scores[64][64] = {{0}};
     for (const Move* move = moves; move != last_move; move++) {
         pos.play<Us>(*move);
-        static_move_scores[move->from()][move->to()] = evaluate<Us>(pos);
+        move_evaluations[move->from()][move->to()] = evaluate<Us>(pos);
         pos.undo<Us>(*move);
 
         if (*move == hash_move) {
@@ -86,15 +86,13 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
                 continue;
             }
 
-            sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
+            sort_scores[move->from()][move->to()] += move_evaluations[move->from()][move->to()];
 
             if (move->is_castling()) {
                 sort_scores[move->from()][move->to()] += 5;
             }
             if (move->is_capture()) {
-                pos.play<Us>(*move);
-                int swapoff = -see<~Us>(pos, move->to());
-                pos.undo<Us>(*move);
+                int swapoff = see<Us>(pos, *move);
                 sort_scores[move->from()][move->to()] += swapoff;
             }
             if (move->is_promotion()) {
@@ -110,11 +108,11 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
     TTEntryFlag flag = UPPERBOUND;
     for (const Move* move = moves; move != last_move; move++) {
         // Futility pruning
-        if (depth == 1 && !move->is_capture() && !in_check && static_move_scores[move->from()][move->to()] + 200 <= alpha) {
+        if (depth == 1 && !move->is_capture() && !in_check && move_evaluations[move->from()][move->to()] + 200 <= alpha) {
             continue;
         }
         // Razoring
-        if (depth == 2 && static_move_scores[move->from()][move->to()] <= alpha) {
+        if (depth == 2 && move_evaluations[move->from()][move->to()] <= alpha) {
             break;
         }
 
@@ -180,11 +178,11 @@ int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const K
         return 0;
     }
 
-    int stand_pat = evaluate<Us>(pos);
-    if (stand_pat >= beta) {
+    int evaluation = evaluate<Us>(pos);
+    if (evaluation >= beta) {
         return beta;
-    } else if (alpha < stand_pat) {
-        alpha = stand_pat;
+    } else if (alpha < evaluation) {
+        alpha = evaluation;
     }
 
     Move hash_move;
@@ -204,22 +202,20 @@ int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const K
         }
     }
 
-    int static_move_scores[64][64] = {{0}};
+    int move_evaluations[64][64] = {{0}};
     int sort_scores[64][64] = {{0}};
     for (const Move* move = moves; move != last_move; move++) {
         if (move->is_capture()) {
             pos.play<Us>(*move);
-            static_move_scores[move->from()][move->to()] = evaluate<Us>(pos);
+            move_evaluations[move->from()][move->to()] = evaluate<Us>(pos);
             pos.undo<Us>(*move);
 
             if (*move == hash_move) {
                 sort_scores[move->from()][move->to()] += piece_values[KING] * 2;
             } else {
-                sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
+                sort_scores[move->from()][move->to()] += move_evaluations[move->from()][move->to()];
 
-                pos.play<Us>(*move);
-                int swapoff = -see<~Us>(pos, move->to());
-                pos.undo<Us>(*move);
+                int swapoff = see<Us>(pos, *move);
                 sort_scores[move->from()][move->to()] += swapoff;
 
                 if (move->is_promotion()) {

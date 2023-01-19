@@ -5,8 +5,8 @@ GameProgress get_progress(int mv1, int mv2) {
 }
 
 bool has_non_pawn_material(const Position& pos, Color c) {
-    for (size_t i = 1; i < NPIECE_TYPES - 1; i++) {
-        if (pos.bitboard_of(c, (PieceType) i)) {
+    for (PieceType i = KNIGHT; i < NPIECE_TYPES - 1; ++i) {
+        if (pos.bitboard_of(c, i)) {
             return true;
         }
     }

@@ -7,4 +7,4 @@ template <Color Us>
 int evaluate(const Position& pos);
 
 template <Color Us>
-int see(const Position& pos, Square sq);
+int see(const Position& pos, Move move);

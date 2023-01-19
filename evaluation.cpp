@@ -1,5 +1,6 @@
 #include "evaluation.hpp"
 #include "util.hpp"
+#include <cassert>
 
 template <Color Us>
 int evaluate(const Position& pos) {
@@ -7,9 +8,9 @@ int evaluate(const Position& pos) {
     int mv = 0;
     int our_mv = 0;
     int their_mv = 0;
-    for (size_t i = 0; i < NPIECE_TYPES - 1; i++) {
-        our_mv += pop_count(pos.bitboard_of(Us, (PieceType) i)) * piece_values[i];
-        their_mv += pop_count(pos.bitboard_of(~Us, (PieceType) i)) * piece_values[i];
+    for (PieceType i = PAWN; i < NPIECE_TYPES - 1; ++i) {
+        our_mv += pop_count(pos.bitboard_of(Us, i)) * piece_values[i];
+        their_mv += pop_count(pos.bitboard_of(~Us, i)) * piece_values[i];
     }
     mv += our_mv;
     mv -= their_mv;
@@ -34,7 +35,7 @@ int evaluate(const Position& pos) {
         if (pos.at(d4) != NO_PIECE) cc += (color_of(pos.at(d4)) == Us) ? 25 : -25;
         if (pos.at(e4) != NO_PIECE) cc += (color_of(pos.at(e4)) == Us) ? 25 : -25;
     } else {
-        throw std::logic_error("Invalid progress value");
+        throw std::logic_error("Invalid game progress");
     }
 
     // Knight placement
@@ -64,7 +65,7 @@ int evaluate(const Position& pos) {
 
     // Pawn placement
     int pp = 0;
-    for (int file = AFILE; file < HFILE; file++) {
+    for (File file = AFILE; file < HFILE; ++file) {
         int our_pawn_count = sparse_pop_count(pos.bitboard_of(Us, PAWN) & MASK_FILE[file]);
         int their_pawn_count = sparse_pop_count(pos.bitboard_of(~Us, PAWN) & MASK_FILE[file]);
         if (our_pawn_count > 1) {
@@ -72,6 +73,45 @@ int evaluate(const Position& pos) {
         }
         if (their_pawn_count > 1) {
             pp += (their_pawn_count - 1) * 75;
+        }
+    }
+
+    // Frontier pawns
+    int fp = 0;
+    for (Color color = WHITE; color < NCOLORS; ++color) {
+        Bitboard pawns = pos.bitboard_of(color, PAWN);
+        while (pawns) {
+            Square sq = pop_lsb(&pawns);
+
+            Bitboard pawns_ahead_mask = MASK_FILE[file_of(sq)];
+            if (file_of(sq) > AFILE) {
+                pawns_ahead_mask |= MASK_FILE[file_of(sq) - 1];
+            }
+            if (file_of(sq) < HFILE) {
+                pawns_ahead_mask |= MASK_FILE[file_of(sq) + 1];
+            }
+
+            if (color == WHITE) {
+                for (Rank rank = RANK1; rank <= rank_of(sq); ++rank) {
+                    pawns_ahead_mask &= ~MASK_RANK[rank];
+                }
+            } else if (color == BLACK) {
+                for (Rank rank = RANK8; rank >= rank_of(sq); --rank) {
+                    pawns_ahead_mask &= ~MASK_RANK[rank];
+                }
+            } else {
+                throw std::logic_error("Invalid color");
+            }
+
+            if (!(pos.bitboard_of(~color, PAWN) & pawns_ahead_mask)) {
+                if (progress == MIDGAME) {
+                    fp += color == Us ? 30 : -30;
+                } else if (progress == ENDGAME) {
+                    fp += color == Us ? 150 : -150;
+                } else {
+                    throw std::logic_error("Invalid game progress");
+                }
+            }
         }
     }
 
@@ -90,43 +130,63 @@ int evaluate(const Position& pos) {
     // std::cout << "Knight placement: " << np << std::endl;
     // std::cout << "King placement: " << kp << std::endl;
     // std::cout << "Pawn placement: " << pp << std::endl;
+    // std::cout << "Frontier pawns: " << fp << std::endl;
     // std::cout << "Check status: " << cs << std::endl;
-    return mv + ca + cc + np + kp + pp + cs;
+    return mv + ca + cc + np + kp + pp + fp + cs;
 }
 
 template <Color Us>
-int see(const Position& pos, Square sq) {
+int see(const Position& pos, Move move) {
+    assert(move.is_capture());
+
+    const Square attacked_sq = move.to();
     Bitboard occ = BOTH_COLOR_CALL(pos.all_pieces);
-    Bitboard attackers = BOTH_COLOR_CALL(pos.attackers_from, sq, occ);
+    Bitboard attackers = BOTH_COLOR_CALL(pos.attackers_from, attacked_sq, occ);
     Bitboard diagonal_sliders = BOTH_COLOR_CALL(pos.diagonal_sliders);
     Bitboard orthogonal_sliders = BOTH_COLOR_CALL(pos.orthogonal_sliders);
 
     int ret = 0;
-    int sq_occ = (pos.at(sq) == NO_PIECE) ? -1 : type_of(pos.at(sq));
+    PieceType attacked_pc = type_of(pos.at(attacked_sq));
+
+    {
+        const Square attacker_sq = move.from();
+        const PieceType attacker_pc = type_of(pos.at(attacker_sq));
+
+        ret += piece_values[attacked_pc];
+        occ &= ~SQUARE_BB[attacker_sq];
+        attackers &= ~SQUARE_BB[attacker_sq];
+        attacked_pc = attacker_pc;
+
+        if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
+            diagonal_sliders &= ~SQUARE_BB[attacker_sq];
+            attackers |= attacks<BISHOP>(attacked_sq, occ) & diagonal_sliders;
+        }
+        if (attacker_pc == ROOK || attacker_pc == QUEEN) {
+            orthogonal_sliders &= ~SQUARE_BB[attacker_sq];
+            attackers |= attacks<ROOK>(attacked_sq, occ) & orthogonal_sliders;
+        }
+    }
+
     for (;;) {
         {
             bool attacked = false;
-            for (size_t attacker_pc = PAWN; attacker_pc < NPIECE_TYPES; attacker_pc++) {
-                Bitboard attacker = attackers & pos.bitboard_of(Us, (PieceType) attacker_pc);
+            for (PieceType attacker_pc = PAWN; attacker_pc < NPIECE_TYPES; ++attacker_pc) {
+                Bitboard attacker = attackers & pos.bitboard_of(~Us, attacker_pc);
                 if (attacker) {
-                    if (sq_occ != -1) {
-                        ret += piece_values[sq_occ];
-                    }
+                    ret -= piece_values[attacked_pc];
 
-                    Square attacker_sq = bsf(attacker);
-                    occ ^= SQUARE_BB[attacker_sq];
-                    attackers ^= SQUARE_BB[attacker_sq];
-                    sq_occ = attacker_pc;
+                    const Square attacker_sq = bsf(attacker);
+                    occ &= ~SQUARE_BB[attacker_sq];
+                    attackers &= ~SQUARE_BB[attacker_sq];
+                    attacked_pc = attacker_pc;
 
                     if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
-                        if (attacker_pc == BISHOP || attacker_pc == QUEEN) {
-                            diagonal_sliders ^= SQUARE_BB[attacker_sq];
-                        }
-                        attackers |= attacks<BISHOP>(sq, occ) & diagonal_sliders;
+                        diagonal_sliders &= ~SQUARE_BB[attacker_sq];
+                        attackers |= attacks<BISHOP>(attacked_sq, occ) & diagonal_sliders;
                     }
                     if (attacker_pc == ROOK || attacker_pc == QUEEN) {
-                        orthogonal_sliders ^= SQUARE_BB[attacker_sq];
-                        attackers |= attacks<ROOK>(sq, occ) & orthogonal_sliders;
+                        orthogonal_sliders &= ~SQUARE_BB[attacker_sq];
+                        attackers |= attacks<ROOK>(attacked_sq, occ) & orthogonal_sliders;
                     }
 
                     attacked = true;
@@ -140,25 +200,23 @@ int see(const Position& pos, Square sq) {
 
         {
             bool attacked = false;
-            for (size_t attacker_pc = PAWN; attacker_pc < NPIECE_TYPES; attacker_pc++) {
-                Bitboard attacker = attackers & pos.bitboard_of(~Us, (PieceType) attacker_pc);
+            for (PieceType attacker_pc = PAWN; attacker_pc < NPIECE_TYPES; ++attacker_pc) {
+                Bitboard attacker = attackers & pos.bitboard_of(Us, attacker_pc);
                 if (attacker) {
-                    if (sq_occ != -1) {
-                        ret -= piece_values[sq_occ];
-                    }
+                    ret += piece_values[attacked_pc];
 
-                    Square attacker_sq = bsf(attacker);
-                    occ ^= SQUARE_BB[attacker_sq];
-                    attackers ^= SQUARE_BB[attacker_sq];
-                    sq_occ = attacker_pc;
+                    const Square attacker_sq = bsf(attacker);
+                    occ &= ~SQUARE_BB[attacker_sq];
+                    attackers &= ~SQUARE_BB[attacker_sq];
+                    attacked_pc = attacker_pc;
 
                     if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
-                        diagonal_sliders ^= SQUARE_BB[attacker_sq];
-                        attackers |= attacks<BISHOP>(sq, occ) & diagonal_sliders;
+                        diagonal_sliders &= ~SQUARE_BB[attacker_sq];
+                        attackers |= attacks<BISHOP>(attacked_sq, occ) & diagonal_sliders;
                     }
                     if (attacker_pc == ROOK || attacker_pc == QUEEN) {
-                        orthogonal_sliders ^= SQUARE_BB[attacker_sq];
-                        attackers |= attacks<ROOK>(sq, occ) & orthogonal_sliders;
+                        orthogonal_sliders &= ~SQUARE_BB[attacker_sq];
+                        attackers |= attacks<ROOK>(attacked_sq, occ) & orthogonal_sliders;
                     }
 
                     attacked = true;
@@ -177,5 +235,5 @@ int see(const Position& pos, Square sq) {
 template int evaluate<WHITE>(const Position& pos);
 template int evaluate<BLACK>(const Position& pos);
 
-template int see<WHITE>(const Position& pos, Square sq);
-template int see<BLACK>(const Position& pos, Square sq);
+template int see<WHITE>(const Position& pos, Move move);
+template int see<BLACK>(const Position& pos, Move move);

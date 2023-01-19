@@ -31,7 +31,7 @@ public:
 };
 
 typedef std::unordered_map<uint64_t, TTEntry> TT;
-typedef Move KillerMoves[2][256][3];
+typedef Move KillerMoves[NCOLORS][256][3];
 
 template <Color Us>
 int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMoves& killer_moves, const std::atomic<bool>& stop);
