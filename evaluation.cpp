@@ -1,9 +1,10 @@
 #include "evaluation.hpp"
 #include "util.hpp"
 #include <cassert>
+#include <iostream>
 
 template <Color Us>
-int evaluate(const Position& pos) {
+int evaluate(const Position& pos, bool debug) {
     // Material value
     int mv = 0;
     int our_mv = 0;
@@ -63,21 +64,21 @@ int evaluate(const Position& pos) {
         kp -= king_pcsq_table[bsf(pos.bitboard_of(~Us, KING))];
     }
 
-    // Pawn placement
-    int pp = 0;
+    // Doubled pawns
+    int db = 0;
     for (File file = AFILE; file < HFILE; ++file) {
         int our_pawn_count = sparse_pop_count(pos.bitboard_of(Us, PAWN) & MASK_FILE[file]);
         int their_pawn_count = sparse_pop_count(pos.bitboard_of(~Us, PAWN) & MASK_FILE[file]);
         if (our_pawn_count > 1) {
-            pp -= (our_pawn_count - 1) * 75;
+            db -= (our_pawn_count - 1) * 75;
         }
         if (their_pawn_count > 1) {
-            pp += (their_pawn_count - 1) * 75;
+            db += (their_pawn_count - 1) * 75;
         }
     }
 
-    // Frontier pawns
-    int fp = 0;
+    // Passed pawns
+    int pp = 0;
     for (Color color = WHITE; color < NCOLORS; ++color) {
         Bitboard pawns = pos.bitboard_of(color, PAWN);
         while (pawns) {
@@ -105,9 +106,9 @@ int evaluate(const Position& pos) {
 
             if (!(pos.bitboard_of(~color, PAWN) & pawns_ahead_mask)) {
                 if (progress == MIDGAME) {
-                    fp += color == Us ? 30 : -30;
+                    pp += color == Us ? 30 : -30;
                 } else if (progress == ENDGAME) {
-                    fp += color == Us ? 150 : -150;
+                    pp += color == Us ? 150 : -150;
                 } else {
                     throw std::logic_error("Invalid game progress");
                 }
@@ -124,15 +125,17 @@ int evaluate(const Position& pos) {
     }
 
     // Sum up various scores
-    // std::cout << "Material value: " << mv << std::endl;
-    // std::cout << "Color advantage: " << ca << std::endl;
-    // std::cout << "Center control: " << cc << std::endl;
-    // std::cout << "Knight placement: " << np << std::endl;
-    // std::cout << "King placement: " << kp << std::endl;
-    // std::cout << "Pawn placement: " << pp << std::endl;
-    // std::cout << "Frontier pawns: " << fp << std::endl;
-    // std::cout << "Check status: " << cs << std::endl;
-    return mv + ca + cc + np + kp + pp + fp + cs;
+    if (debug) {
+        std::cout << "Material value: " << mv << std::endl;
+        std::cout << "Color advantage: " << ca << std::endl;
+        std::cout << "Center control: " << cc << std::endl;
+        std::cout << "Knight placement: " << np << std::endl;
+        std::cout << "King placement: " << kp << std::endl;
+        std::cout << "Doubled pawns: " << db << std::endl;
+        std::cout << "Passed pawns: " << pp << std::endl;
+        std::cout << "Check status: " << cs << std::endl;
+    }
+    return mv + ca + cc + np + kp + db + pp + cs;
 }
 
 template <Color Us>
@@ -232,8 +235,8 @@ int see(const Position& pos, Move move) {
     return ret;
 }
 
-template int evaluate<WHITE>(const Position& pos);
-template int evaluate<BLACK>(const Position& pos);
+template int evaluate<WHITE>(const Position& pos, bool debug);
+template int evaluate<BLACK>(const Position& pos, bool debug);
 
 template int see<WHITE>(const Position& pos, Move move);
 template int see<BLACK>(const Position& pos, Move move);

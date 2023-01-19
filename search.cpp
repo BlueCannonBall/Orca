@@ -2,7 +2,6 @@
 #include "evaluation.hpp"
 #include "surge/src/types.h"
 #include <algorithm>
-#include <atomic>
 #include <cassert>
 #include <climits>
 #include <cmath>

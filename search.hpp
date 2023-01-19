@@ -7,7 +7,9 @@
 #include "util.hpp"
 #include <atomic>
 #include <climits>
+#include <thread>
 #include <unordered_map>
+#include <vector>
 
 enum TTEntryFlag {
     EXACT,

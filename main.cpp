@@ -145,9 +145,9 @@ protected:
                 str_case("evaluate") :
             {
                 if (pos.turn() == WHITE) {
-                    this->send_message("evaluation", {std::to_string(evaluate<WHITE>(pos))});
+                    this->send_message("evaluation", {std::to_string(evaluate<WHITE>(pos, true))});
                 } else if (pos.turn() == BLACK) {
-                    this->send_message("evaluation", {std::to_string(evaluate<BLACK>(pos))});
+                    this->send_message("evaluation", {std::to_string(evaluate<BLACK>(pos, true))});
                 } else {
                     throw std::logic_error("Invalid side to move");
                 }
