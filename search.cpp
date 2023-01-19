@@ -36,11 +36,10 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
         return quiesce<Us>(pos, alpha, beta, depth - 1, tt, killer_moves, stop);
     }
 
-    bool is_pv = alpha != beta - 1;
     bool in_check = pos.in_check<Us>();
 
     // Reverse futility pruning
-    if (depth <= 8 && !in_check && !is_pv) {
+    if (depth <= 8 && !in_check) {
         int evaluation = evaluate<Us>(pos);
         if (evaluation - (120 * depth) >= beta) {
             return evaluation;
@@ -48,7 +47,7 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
     }
 
     // Null move heuristic
-    // if (!is_pv && depth > 3 && !in_check && has_non_pawn_material(pos, Us)) {
+    // if (depth > 3 && !pos.is_last_move_null() && !in_check && has_non_pawn_material(pos, Us)) {
     //     pos.play<Us>(Move());
     //     int score = -alpha_beta<~Us>(pos, -beta, -alpha, depth - 3, tt, killer_moves, stop);
     //     pos.undo<Us>(Move());
@@ -89,16 +88,14 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
 
             sort_scores[move->from()][move->to()] += static_move_scores[move->from()][move->to()];
 
-            pos.play<Us>(*move);
-            int swapoff = -see<~Us>(pos, move->to());
-            pos.undo<Us>(*move);
-            sort_scores[move->from()][move->to()] += swapoff;
-
             if (move->is_castling()) {
                 sort_scores[move->from()][move->to()] += 5;
             }
             if (move->is_capture()) {
-                sort_scores[move->from()][move->to()] += 15;
+                pos.play<Us>(*move);
+                int swapoff = -see<~Us>(pos, move->to());
+                pos.undo<Us>(*move);
+                sort_scores[move->from()][move->to()] += swapoff;
             }
             if (move->is_promotion()) {
                 sort_scores[move->from()][move->to()] += 30;
@@ -127,22 +124,9 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
             reduced_depth -= 2;
         }
 
-        // PVS
         pos.play<Us>(*move);
-        int score;
-        if (hash_move.is_null() || *move == hash_move) {
-            score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
-        } else {
-            score = -alpha_beta<~Us>(pos, -alpha - 1, -alpha, reduced_depth - 1, tt, killer_moves, stop);
-            if (score > alpha) {
-                score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
-            }
-        }
+        int score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
         pos.undo<Us>(*move);
-
-        // pos.play<Us>(*move);
-        // int score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
-        // pos.undo<Us>(*move);
 
         if (stop) {
             return 0;
