@@ -5,6 +5,7 @@
 #include "threadpool.hpp"
 #include "uci.hpp"
 #include "util.hpp"
+#include <iostream>
 
 class Engine: public uci::Engine {
 protected:

@@ -126,14 +126,14 @@ int evaluate(const Position& pos, bool debug) {
 
     // Sum up various scores
     if (debug) {
-        std::cout << "Material value: " << mv << std::endl;
-        std::cout << "Color advantage: " << ca << std::endl;
-        std::cout << "Center control: " << cc << std::endl;
-        std::cout << "Knight placement: " << np << std::endl;
-        std::cout << "King placement: " << kp << std::endl;
-        std::cout << "Doubled pawns: " << db << std::endl;
-        std::cout << "Passed pawns: " << pp << std::endl;
-        std::cout << "Check status: " << cs << std::endl;
+        std::cerr << "Material value: " << mv << std::endl;
+        std::cerr << "Color advantage: " << ca << std::endl;
+        std::cerr << "Center control: " << cc << std::endl;
+        std::cerr << "Knight placement: " << np << std::endl;
+        std::cerr << "King placement: " << kp << std::endl;
+        std::cerr << "Doubled pawns: " << db << std::endl;
+        std::cerr << "Passed pawns: " << pp << std::endl;
+        std::cerr << "Check status: " << cs << std::endl;
     }
     return mv + ca + cc + np + kp + db + pp + cs;
 }
