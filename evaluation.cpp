@@ -20,7 +20,7 @@ int evaluate(const Position& pos, bool debug) {
     // Color advantage
     int ca = 0;
     if (progress == MIDGAME) {
-        ca = (Us == WHITE) ? 15 : -15;
+        ca = (Us == WHITE) ? 20 : -20;
     }
 
     // Center control
@@ -116,6 +116,29 @@ int evaluate(const Position& pos, bool debug) {
         }
     }
 
+    // Isolated pawns
+    int ip = 0;
+    if (progress == MIDGAME) {
+        for (Color color = WHITE; color < NCOLORS; ++color) {
+            Bitboard pawns = pos.bitboard_of(color, PAWN);
+            while (pawns) {
+                Square sq = pop_lsb(&pawns);
+
+                Bitboard buddies_mask = 0;
+                if (file_of(sq) > AFILE) {
+                    buddies_mask |= MASK_FILE[file_of(sq) - 1];
+                }
+                if (file_of(sq) < HFILE) {
+                    buddies_mask |= MASK_FILE[file_of(sq) + 1];
+                }
+
+                if (!(pos.bitboard_of(color, PAWN) & buddies_mask)) {
+                    ip += color == Us ? -15 : 15;
+                }
+            }
+        }
+    }
+
     // Check status
     int cs = 0;
     if (pos.in_check<Us>()) {
@@ -133,9 +156,10 @@ int evaluate(const Position& pos, bool debug) {
         std::cerr << "King placement: " << kp << std::endl;
         std::cerr << "Doubled pawns: " << db << std::endl;
         std::cerr << "Passed pawns: " << pp << std::endl;
+        std::cerr << "Isolated pawns: " << ip << std::endl;
         std::cerr << "Check status: " << cs << std::endl;
     }
-    return mv + ca + cc + np + kp + db + pp + cs;
+    return mv + ca + cc + np + kp + db + pp + ip + cs;
 }
 
 template <Color Us>
