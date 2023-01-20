@@ -65,15 +65,15 @@ int evaluate(const Position& pos, bool debug) {
     }
 
     // Doubled pawns
-    int db = 0;
+    int dp = 0;
     for (File file = AFILE; file < HFILE; ++file) {
         int our_pawn_count = sparse_pop_count(pos.bitboard_of(Us, PAWN) & MASK_FILE[file]);
         int their_pawn_count = sparse_pop_count(pos.bitboard_of(~Us, PAWN) & MASK_FILE[file]);
         if (our_pawn_count > 1) {
-            db -= (our_pawn_count - 1) * 75;
+            dp -= (our_pawn_count - 1) * 75;
         }
         if (their_pawn_count > 1) {
-            db += (their_pawn_count - 1) * 75;
+            dp += (their_pawn_count - 1) * 75;
         }
     }
 
@@ -154,12 +154,12 @@ int evaluate(const Position& pos, bool debug) {
         std::cerr << "Center control: " << cc << std::endl;
         std::cerr << "Knight placement: " << np << std::endl;
         std::cerr << "King placement: " << kp << std::endl;
-        std::cerr << "Doubled pawns: " << db << std::endl;
+        std::cerr << "Doubled pawns: " << dp << std::endl;
         std::cerr << "Passed pawns: " << pp << std::endl;
         std::cerr << "Isolated pawns: " << ip << std::endl;
         std::cerr << "Check status: " << cs << std::endl;
     }
-    return mv + ca + cc + np + kp + db + pp + ip + cs;
+    return mv + ca + cc + np + kp + dp + pp + ip + cs;
 }
 
 template <Color Us>
