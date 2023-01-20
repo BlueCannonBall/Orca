@@ -17,7 +17,7 @@ template <>
 MoveFlags generate_move_flags<WHITE>(const Position& pos, Square from, Square to) {
     if (pos.at(to) != NO_PIECE) {
         if (pos.at(from) == WHITE_PAWN && rank_of(to) == RANK8) {
-            return PC_QUEEN;
+            return PROMOTION_CAPTURES;
         } else {
             return CAPTURE;
         }
@@ -31,7 +31,7 @@ MoveFlags generate_move_flags<WHITE>(const Position& pos, Square from, Square to
         }
     } else if (pos.at(from) == WHITE_PAWN) {
         if (rank_of(to) == RANK8) {
-            return PR_QUEEN;
+            return PROMOTIONS;
         } else if (file_of(from) != file_of(to) && pos.at(to) == NO_PIECE) {
             return EN_PASSANT;
         }
@@ -43,7 +43,7 @@ template <>
 MoveFlags generate_move_flags<BLACK>(const Position& pos, Square from, Square to) {
     if (pos.at(to) != NO_PIECE) {
         if (pos.at(from) == BLACK_PAWN && rank_of(to) == RANK1) {
-            return PC_QUEEN;
+            return PROMOTION_CAPTURES;
         } else {
             return CAPTURE;
         }
@@ -57,7 +57,7 @@ MoveFlags generate_move_flags<BLACK>(const Position& pos, Square from, Square to
         }
     } else if (pos.at(from) == BLACK_PAWN) {
         if (rank_of(to) == RANK1) {
-            return PR_QUEEN;
+            return PROMOTION_CAPTURES;
         } else if (file_of(from) != file_of(to) && pos.at(to) == NO_PIECE) {
             return EN_PASSANT;
         }
@@ -69,7 +69,7 @@ template <>
 MoveFlags generate_attack_move_flags<WHITE>(const Position& pos, Square from, Square to) {
     if (pos.at(to) != NO_PIECE) {
         if (pos.at(from) == WHITE_PAWN && rank_of(to) == RANK8) {
-            return PC_QUEEN;
+            return PROMOTION_CAPTURES;
         } else {
             return CAPTURE;
         }
@@ -83,7 +83,7 @@ template <>
 MoveFlags generate_attack_move_flags<BLACK>(const Position& pos, Square from, Square to) {
     if (pos.at(to) != NO_PIECE) {
         if (pos.at(from) == BLACK_PAWN && rank_of(to) == RANK1) {
-            return PC_QUEEN;
+            return PROMOTION_CAPTURES;
         } else {
             return CAPTURE;
         }

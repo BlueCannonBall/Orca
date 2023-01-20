@@ -33,9 +33,73 @@ protected:
                             Square from = create_square(File(args[i][0] - 'a'), Rank(args[i][1] - '1'));
                             Square to = create_square(File(args[i][2] - 'a'), Rank(args[i][3] - '1'));
                             if (((i - 2) % 2) == 0) {
-                                pos.play<WHITE>(Move(from, to, generate_move_flags<WHITE>(pos, from, to)));
+                                MoveFlags m_flags = generate_move_flags<WHITE>(pos, from, to);
+                                if (m_flags == PROMOTIONS) {
+                                    switch (args[i][4]) {
+                                        case 'n':
+                                            m_flags = PR_KNIGHT;
+                                            break;
+                                        case 'b':
+                                            m_flags = PR_BISHOP;
+                                            break;
+                                        case 'r':
+                                            m_flags = PR_ROOK;
+                                            break;
+                                        case 'q':
+                                            m_flags = PR_QUEEN;
+                                            break;
+                                    }
+                                } else if (m_flags == PROMOTION_CAPTURES) {
+                                    switch (args[i][4]) {
+                                        case 'n':
+                                            m_flags = PC_KNIGHT;
+                                            break;
+                                        case 'b':
+                                            m_flags = PC_BISHOP;
+                                            break;
+                                        case 'r':
+                                            m_flags = PC_ROOK;
+                                            break;
+                                        case 'q':
+                                            m_flags = PC_QUEEN;
+                                            break;
+                                    }
+                                }
+                                pos.play<WHITE>(Move(from, to, m_flags));
                             } else {
-                                pos.play<BLACK>(Move(from, to, generate_move_flags<BLACK>(pos, from, to)));
+                                MoveFlags m_flags = generate_move_flags<BLACK>(pos, from, to);
+                                if (m_flags == PROMOTIONS) {
+                                    switch (args[i][4]) {
+                                        case 'n':
+                                            m_flags = PR_KNIGHT;
+                                            break;
+                                        case 'b':
+                                            m_flags = PR_BISHOP;
+                                            break;
+                                        case 'r':
+                                            m_flags = PR_ROOK;
+                                            break;
+                                        case 'q':
+                                            m_flags = PR_QUEEN;
+                                            break;
+                                    }
+                                } else if (m_flags == PROMOTION_CAPTURES) {
+                                    switch (args[i][4]) {
+                                        case 'n':
+                                            m_flags = PC_KNIGHT;
+                                            break;
+                                        case 'b':
+                                            m_flags = PC_BISHOP;
+                                            break;
+                                        case 'r':
+                                            m_flags = PC_ROOK;
+                                            break;
+                                        case 'q':
+                                            m_flags = PC_QUEEN;
+                                            break;
+                                    }
+                                }
+                                pos.play<BLACK>(Move(from, to, m_flags));
                             }
                         }
                     }

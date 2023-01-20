@@ -85,10 +85,25 @@ namespace uci {
         void move(Move move) {
             std::cout << "bestmove " << SQSTR[move.from()] << SQSTR[move.to()];
             if (move.is_promotion()) {
-                std::cout << "q" << std::endl;
-            } else {
-                std::cout << std::endl;
+                switch (move.promotion()) {
+                    case KNIGHT:
+                        std::cout << 'n';
+                        break;
+                    case BISHOP:
+                        std::cout << 'b';
+                        break;
+                    case ROOK:
+                        std::cout << 'r';
+                        break;
+                    case QUEEN:
+                        std::cout << 'q';
+                        break;
+
+                    default:
+                        throw std::logic_error("Invalid promotion");
+                }
             }
+            std::cout << std::endl;
         }
 
         virtual ~Engine() { }
