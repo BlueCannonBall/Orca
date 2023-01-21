@@ -77,7 +77,7 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
             }
             if (move->is_capture()) {
                 sort_scores[move->from()][move->to()] += 15;
-                if (!(move->is_promotion()) && !(move->flags() == EN_PASSANT)) {
+                if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
                     sort_scores[move->from()][move->to()] += see<Us>(pos, *move);
                 }
             }
@@ -177,11 +177,13 @@ int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const K
         hash_move = entry_it->second.best_move;
     }
 
+    bool in_check = pos.in_check<Us>();
+
     Move moves[218];
     Move* last_move = pos.generate_legals<Us>(moves);
 
     if (moves == last_move) {
-        if (pos.in_check<Us>()) {
+        if (in_check) {
             return -piece_values[KING] - depth;
         } else {
             return 0;
@@ -201,7 +203,7 @@ int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const K
             } else {
                 sort_scores[move->from()][move->to()] += move_evaluations[move->from()][move->to()];
 
-                if (!(move->is_promotion()) && !(move->flags() == EN_PASSANT)) {
+                if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
                     sort_scores[move->from()][move->to()] += see<Us>(pos, *move);
                 }
 

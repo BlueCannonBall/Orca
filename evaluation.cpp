@@ -194,65 +194,37 @@ int see(const Position& pos, Move move) {
         }
     }
 
-    for (;;) {
-        {
-            bool attacked = false;
-            for (PieceType attacker_pc = PAWN; attacker_pc < NPIECE_TYPES; ++attacker_pc) {
-                Bitboard attacker = attackers & pos.bitboard_of(~Us, attacker_pc);
-                if (attacker) {
-                    ret -= piece_values[attacked_pc];
-
-                    const Square attacker_sq = bsf(attacker);
-                    occ &= ~SQUARE_BB[attacker_sq];
-                    attackers &= ~SQUARE_BB[attacker_sq];
-                    attacked_pc = attacker_pc;
-
-                    if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
-                        diagonal_sliders &= ~SQUARE_BB[attacker_sq];
-                        attackers |= attacks<BISHOP>(attacked_sq, occ) & diagonal_sliders;
-                    }
-                    if (attacker_pc == ROOK || attacker_pc == QUEEN) {
-                        orthogonal_sliders &= ~SQUARE_BB[attacker_sq];
-                        attackers |= attacks<ROOK>(attacked_sq, occ) & orthogonal_sliders;
-                    }
-
-                    attacked = true;
+    for (Color side_to_play = ~Us;; side_to_play = ~side_to_play) {
+        bool attacked = false;
+        for (PieceType attacker_pc = PAWN; attacker_pc < NPIECE_TYPES; ++attacker_pc) {
+            Bitboard attacker = attackers & pos.bitboard_of(side_to_play, attacker_pc);
+            if (attacker) {
+                if (attacker_pc == KING && (attackers & DYN_COLOR_CALL(pos.all_pieces, ~side_to_play))) {
                     break;
                 }
-            }
-            if (!attacked) {
+
+                ret += side_to_play == Us ? piece_values[attacked_pc] : -piece_values[attacked_pc];
+
+                const Square attacker_sq = bsf(attacker);
+                occ &= ~SQUARE_BB[attacker_sq];
+                attackers &= ~SQUARE_BB[attacker_sq];
+                attacked_pc = attacker_pc;
+
+                if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
+                    diagonal_sliders &= ~SQUARE_BB[attacker_sq];
+                    attackers |= attacks<BISHOP>(attacked_sq, occ) & diagonal_sliders;
+                }
+                if (attacker_pc == ROOK || attacker_pc == QUEEN) {
+                    orthogonal_sliders &= ~SQUARE_BB[attacker_sq];
+                    attackers |= attacks<ROOK>(attacked_sq, occ) & orthogonal_sliders;
+                }
+
+                attacked = true;
                 break;
             }
         }
-
-        {
-            bool attacked = false;
-            for (PieceType attacker_pc = PAWN; attacker_pc < NPIECE_TYPES; ++attacker_pc) {
-                Bitboard attacker = attackers & pos.bitboard_of(Us, attacker_pc);
-                if (attacker) {
-                    ret += piece_values[attacked_pc];
-
-                    const Square attacker_sq = bsf(attacker);
-                    occ &= ~SQUARE_BB[attacker_sq];
-                    attackers &= ~SQUARE_BB[attacker_sq];
-                    attacked_pc = attacker_pc;
-
-                    if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
-                        diagonal_sliders &= ~SQUARE_BB[attacker_sq];
-                        attackers |= attacks<BISHOP>(attacked_sq, occ) & diagonal_sliders;
-                    }
-                    if (attacker_pc == ROOK || attacker_pc == QUEEN) {
-                        orthogonal_sliders &= ~SQUARE_BB[attacker_sq];
-                        attackers |= attacks<ROOK>(attacked_sq, occ) & orthogonal_sliders;
-                    }
-
-                    attacked = true;
-                    break;
-                }
-            }
-            if (!attacked) {
-                break;
-            }
+        if (!attacked) {
+            break;
         }
     }
 

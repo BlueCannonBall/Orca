@@ -10,7 +10,7 @@
 class Engine: public uci::Engine {
 protected:
     Position pos;
-    int moves_made = 0;
+    int plies_made = 0;
     tp::ThreadPool pool;
 
 public:
@@ -27,12 +27,12 @@ protected:
         str_switch(command) {
             str_case("position") :
             {
-                moves_made = 0;
+                plies_made = 0;
                 if (args[0] == "startpos") {
                     pos = Position(DEFAULT_FEN);
                     if (args.size() > 1) {
                         for (size_t i = 2; i < args.size(); i++) {
-                            moves_made++;
+                            plies_made++;
                             Square from = create_square(File(args[i][0] - 'a'), Rank(args[i][1] - '1'));
                             Square to = create_square(File(args[i][2] - 'a'), Rank(args[i][3] - '1'));
                             if (((i - 2) % 2) == 0) {
@@ -117,7 +117,7 @@ protected:
                     pos = Position(fen);
                     if (args.size() > 7) {
                         for (size_t i = 8; i < args.size(); i++) {
-                            moves_made++;
+                            plies_made++;
                             Square from = create_square(File(args[i][0] - 'a'), Rank(args[i][1] - '1'));
                             Square to = create_square(File(args[i][2] - 'a'), Rank(args[i][3] - '1'));
                             if (((i - 8) % 2) == 0) {
@@ -218,10 +218,10 @@ protected:
 
                 std::chrono::milliseconds search_time = std::chrono::seconds(10);
                 int moves_left;
-                if (moves_made < 60) {
-                    moves_left = ((-2 / 3) * moves_made) + 50;
-                } else if (moves_made >= 60) {
-                    moves_left = (0.1 * (moves_made - 60)) + 10;
+                if (plies_made / 2 < 60) {
+                    moves_left = ((-2 / 3) * (plies_made / 2)) + 50;
+                } else if (plies_made / 2 >= 60) {
+                    moves_left = (0.1 * ((float) plies_made / 2 - 60)) + 10;
                 }
 
                 Move best_move;
