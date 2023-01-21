@@ -59,9 +59,9 @@ Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, t
     int best_move_depth = 0;
     std::atomic<bool> stop(false);
 
-    std::thread deepening_thread([engine, &pos, starting_depth, &pool, &moves, last_move, &tts, &killer_move_lists, &best_move, &best_move_score, &best_move_depth, &stop]() {
+    std::thread deepening_thread([engine, &pos, &pool, &moves, last_move, &tts, &killer_move_lists, &best_move, &best_move_score, &best_move_depth, &stop]() {
         std::vector<std::shared_ptr<tp::Task>> tasks;
-        for (int current_depth = starting_depth; !stop && current_depth < 256; current_depth++) {
+        for (int current_depth = 1; !stop && current_depth < 256; current_depth++) {
             std::mutex current_mtx;
             Move current_best_move;
             int current_best_move_score = INT_MIN;
