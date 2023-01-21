@@ -149,45 +149,32 @@ protected:
                 }
 
                 std::chrono::milliseconds search_time = std::chrono::seconds(10);
-                int starting_depth = 7;
 
                 Move best_move;
                 if (pos.turn() == WHITE) {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
                     } else if (wtime != std::chrono::milliseconds(-1)) {
-                        search_time = std::chrono::milliseconds(std::min(wtime.count() / 40, 15000L));
+                        search_time = std::chrono::milliseconds(std::min(wtime.count() / 40, 10000L));
                     }
 
                     if (search_time - std::chrono::milliseconds(500) < winc) {
                         search_time = winc - std::chrono::milliseconds(500);
                     }
 
-                    if (search_time.count() < 250) {
-                        starting_depth = 5;
-                    } else if (search_time.count() < 3000) {
-                        starting_depth = 6;
-                    }
-
-                    best_move = find_best_move<WHITE>(this, pos, search_time, starting_depth, pool);
+                    best_move = find_best_move<WHITE>(this, pos, search_time, pool);
                 } else if (pos.turn() == BLACK) {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
                     } else if (btime != std::chrono::milliseconds(-1)) {
-                        search_time = std::chrono::milliseconds(std::min(btime.count() / 40, 15000L));
+                        search_time = std::chrono::milliseconds(std::min(btime.count() / 40, 10000L));
                     }
 
                     if (search_time - std::chrono::milliseconds(500) < binc) {
                         search_time = binc - std::chrono::milliseconds(500);
                     }
 
-                    if (search_time.count() < 250) {
-                        starting_depth = 5;
-                    } else if (search_time.count() < 3000) {
-                        starting_depth = 6;
-                    }
-
-                    best_move = find_best_move<BLACK>(this, pos, search_time, starting_depth, pool);
+                    best_move = find_best_move<BLACK>(this, pos, search_time, pool);
                 } else {
                     throw std::logic_error("Invalid side to move");
                 }

@@ -45,21 +45,6 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
         }
     }
 
-    // Null move heuristic
-    // if (depth > 3 && !pos.is_last_move_null() && !in_check && has_non_pawn_material(pos, Us)) {
-    //     pos.play<Us>(Move());
-    //     int score = -alpha_beta<~Us>(pos, -beta, -alpha, depth - 3, tt, killer_moves, stop);
-    //     pos.undo<Us>(Move());
-
-    //     if (stop) {
-    //         return 0;
-    //     }
-
-    //     if (score >= beta) {
-    //         return beta;
-    //     }
-    // }
-
     Move moves[218];
     Move* last_move = pos.generate_legals<Us>(moves);
 

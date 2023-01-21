@@ -42,7 +42,7 @@ template <Color Us>
 int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const KillerMoves& killer_moves, const std::atomic<bool>& stop);
 
 template <Color Us, typename DurationT>
-Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, int starting_depth, tp::ThreadPool& pool, int* best_move_score_ret = nullptr, int* best_move_depth_ret = nullptr) {
+Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, tp::ThreadPool& pool, int* best_move_score_ret = nullptr, int* best_move_depth_ret = nullptr) {
     Move moves[218];
     Move* last_move = pos.generate_legals<Us>(moves);
     if (last_move - moves == 1) {
