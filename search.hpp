@@ -75,16 +75,16 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
 
     std::thread deepening_thread([engine, &pos, &rt, &pool, &moves, last_move, &finders, &best_move, &ponder_move, &stop]() {
         std::vector<std::shared_ptr<tp::Task>> tasks;
-        for (int current_depth = 2; !stop && pos.game_ply + current_depth < 2048; current_depth++) {
+        for (int depth = 2; !stop && pos.game_ply + depth < 2048; depth++) {
             std::mutex mtx;
             Move current_best_move;
             int best_move_score = INT_MIN;
             unsigned long long nodes = 0;
 
             for (Move* move = moves; move != last_move; move++) {
-                tasks.push_back(pool.schedule([pos, &rt, &moves, &finders, current_depth, move, &mtx, &current_best_move, &best_move_score, &stop](void*) mutable {
+                tasks.push_back(pool.schedule([pos, &rt, &moves, &finders, depth, move, &mtx, &current_best_move, &best_move_score, &stop](void*) mutable {
                     Finder& finder = finders[move - moves];
-                    finder.max_depth = current_depth;
+                    finder.max_depth = depth;
 
                     pos.play<Us>(*move);
                     int score;
@@ -92,7 +92,7 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                     if ((entry_it = rt.find(pos.get_hash())) != rt.end() && entry_it->second + 1 >= 3) {
                         score = 0;
                     } else {
-                        score = -finder.alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, stop);
+                        score = -finder.alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, depth - 1, stop);
                     }
                     pos.undo<Us>(*move);
 
@@ -125,7 +125,7 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
 
                 Move current_move = best_move;
                 Position current_pos = pos;
-                for (Color side_to_move = Us; current_pos.game_ply < 2048; side_to_move = ~side_to_move) {
+                for (Color side_to_move = Us; current_pos.game_ply < pos.game_ply + depth && current_pos.game_ply < 2048; side_to_move = ~side_to_move) {
                     pv.push_back(uci::format_move(current_move));
 
                     DYN_COLOR_CALL(current_pos.play, side_to_move, current_move);
@@ -144,7 +144,7 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                     }
                 }
 
-                std::vector<std::string> args = {"depth", std::to_string(current_depth), "score", "cp", std::to_string(best_move_score), "nodes", std::to_string(nodes), "pv"};
+                std::vector<std::string> args = {"depth", std::to_string(depth), "score", "cp", std::to_string(best_move_score), "nodes", std::to_string(nodes), "pv"};
                 args.insert(args.end(), pv.begin(), pv.end());
                 engine->send_message("info", args);
             }
