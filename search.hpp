@@ -35,53 +35,89 @@ public:
 typedef std::unordered_map<uint64_t, TTEntry> TT;
 typedef Move KillerMoves[NCOLORS][256][3];
 
-template <Color Us>
-int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMoves& killer_moves, const std::atomic<bool>& stop);
+class Finder {
+public:
+    int max_depth;
+    TT tt;
+    KillerMoves killer_moves;
 
-template <Color Us>
-int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const KillerMoves& killer_moves, const std::atomic<bool>& stop);
+    Finder(int max_depth = 0) :
+        max_depth(max_depth) { }
+
+    template <Color Us>
+    int alpha_beta(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop);
+
+    template <Color Us>
+    int quiesce(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop);
+
+protected:
+    template <Color C>
+    void add_killer_move(Move move, int depth);
+
+    template <Color Us>
+    bool is_killer_move(Move move, int depth) const;
+};
 
 template <Color Us, typename DurationT>
-Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, tp::ThreadPool& pool, int* best_move_score_ret = nullptr, int* best_move_depth_ret = nullptr) {
+void go(uci::Engine* engine, Position& pos, DurationT search_time, tp::ThreadPool& pool) {
     Move moves[218];
     Move* last_move = pos.generate_legals<Us>(moves);
     if (last_move - moves == 1) {
-        if (best_move_score_ret) *best_move_score_ret = 0;
-        if (best_move_depth_ret) *best_move_depth_ret = 0;
-        return moves[0];
+        engine->move(moves[0]);
     }
 
-    std::vector<TT> tts(last_move - moves);
-    std::vector<KillerMoves> killer_move_lists(last_move - moves);
+    std::vector<Finder> finders(last_move - moves);
 
     Move best_move;
-    int best_move_score = INT_MIN;
-    int best_move_depth = 0;
+    Move ponder_move;
     std::atomic<bool> stop(false);
 
-    std::thread deepening_thread([engine, &pos, &pool, &moves, last_move, &tts, &killer_move_lists, &best_move, &best_move_score, &best_move_depth, &stop]() {
+    std::thread deepening_thread([engine, &pos, &pool, &moves, last_move, &finders, &best_move, &ponder_move, &stop]() {
         std::vector<std::shared_ptr<tp::Task>> tasks;
-        for (int current_depth = 1; !stop && current_depth < 256; current_depth++) {
-            std::mutex current_mtx;
+        for (int current_depth = 2; !stop && pos.game_ply + current_depth < 2048; current_depth++) {
+            std::mutex mtx;
             Move current_best_move;
-            int current_best_move_score = INT_MIN;
+            int best_move_score = INT_MIN;
+            unsigned long long nodes = 0;
 
             for (Move* move = moves; move != last_move; move++) {
-                tasks.push_back(pool.schedule([pos, &moves, &tts, &killer_move_lists, current_depth, move, &current_mtx, &current_best_move, &current_best_move_score, &stop](void*) mutable {
-                    TT& tt = tts[move - moves];
-                    KillerMoves& killer_moves = killer_move_lists[move - moves];
+                tasks.push_back(pool.schedule([pos, &moves, &finders, current_depth, move, &mtx, &current_best_move, &best_move_score, &stop](void*) mutable {
+                    Finder& finder = finders[move - moves];
+                    finder.max_depth = current_depth;
 
                     pos.play<Us>(*move);
-                    int score = -alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, tt, killer_moves, stop);
+                    int score = -finder.alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, stop);
                     pos.undo<Us>(*move);
 
-                    if (!stop) {
-                        current_mtx.lock();
-                        if (score > current_best_move_score) {
-                            current_best_move = *move;
-                            current_best_move_score = score;
+                    Position current_pos = pos;
+                    Move current_move = *move;
+                    bool repetition = true;
+                    for (Color side_to_move = Us; current_pos.game_ply < pos.game_ply + current_depth; side_to_move = ~side_to_move) {
+                        DYN_COLOR_CALL(current_pos.play, side_to_move, current_move);
+                        TT::const_iterator entry_it;
+                        if ((entry_it = finder.tt.find(current_pos.get_hash())) != finder.tt.end()) {
+                            if (entry_it->second.best_move.is_null()) {
+                                repetition = false;
+                                break;
+                            } else {
+                                current_move = entry_it->second.best_move;
+                            }
+                        } else {
+                            repetition = false;
+                            break;
                         }
-                        current_mtx.unlock();
+                    }
+                    if (repetition) {
+                        score = 0;
+                    }
+
+                    if (!stop) {
+                        mtx.lock();
+                        if (score > best_move_score) {
+                            current_best_move = *move;
+                            best_move_score = score;
+                        }
+                        mtx.unlock();
                     }
                 }));
             }
@@ -95,19 +131,45 @@ Move find_best_move(uci::Engine* engine, Position& pos, DurationT search_time, t
 
             if (!stop) {
                 best_move = current_best_move;
-                best_move_score = current_best_move_score;
-                best_move_depth = current_depth;
-                engine->send_message("info", {"depth", std::to_string(best_move_depth), "score", "cp", std::to_string(best_move_score)});
+                for (const auto& finder : finders) {
+                    nodes += finder.tt.size();
+                }
+
+                std::vector<std::string> pv;
+                const TT& tt = finders[std::find(moves, last_move, best_move) - moves].tt;
+
+                Move current_move = best_move;
+                Position current_pos = pos;
+                for (Color side_to_move = Us; current_pos.game_ply < 2048; side_to_move = ~side_to_move) {
+                    pv.push_back(uci::format_move(current_move));
+
+                    DYN_COLOR_CALL(current_pos.play, side_to_move, current_move);
+                    TT::const_iterator entry_it;
+                    if ((entry_it = tt.find(current_pos.get_hash())) != tt.end()) {
+                        if (entry_it->second.best_move.is_null()) {
+                            break;
+                        } else {
+                            current_move = entry_it->second.best_move;
+                            if (pv.size() == 1) {
+                                ponder_move = current_move;
+                            }
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                std::vector<std::string> args = {"depth", std::to_string(current_depth), "score", "cp", std::to_string(best_move_score), "nodes", std::to_string(nodes), "pv"};
+                args.insert(args.end(), pv.begin(), pv.end());
+                engine->send_message("info", args);
             }
         }
     });
 
     std::this_thread::sleep_for(search_time);
-    while (best_move_depth == 0) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+    while (best_move.is_null()) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
     stop = true;
     deepening_thread.join();
 
-    if (best_move_score_ret) *best_move_score_ret = best_move_score;
-    if (best_move_depth_ret) *best_move_depth_ret = best_move_depth;
-    return best_move;
+    engine->move(best_move, ponder_move);
 }

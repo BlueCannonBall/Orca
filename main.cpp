@@ -3,6 +3,7 @@
 #include "surge/src/position.h"
 #include "surge/src/types.h"
 #include "threadpool.hpp"
+#include "logger.hpp"
 #include "uci.hpp"
 #include "util.hpp"
 #include <iostream>
@@ -10,13 +11,14 @@
 class Engine: public uci::Engine {
 protected:
     Position pos;
-    int plies_made = 0;
     tp::ThreadPool pool;
+    Logger logger;
 
 public:
     Engine() :
         uci::Engine("orca", "BlueCannonBall"),
-        pos(DEFAULT_FEN) { }
+        pos(DEFAULT_FEN),
+        logger("/tmp/orca.log") { }
 
 protected:
     void declare_options() override {
@@ -24,15 +26,20 @@ protected:
     }
 
     void on_message(const std::string& command, const std::vector<std::string>& args) override {
+        std::string full_line;
+        full_line += command;
+        for (const auto& arg : args) {
+            full_line += ' ' + arg;
+        }
+        logger.info("Got UCI command: " + full_line);
+
         str_switch(command) {
             str_case("position") :
             {
-                plies_made = 0;
                 if (args[0] == "startpos") {
                     pos = Position(DEFAULT_FEN);
                     if (args.size() > 1) {
                         for (size_t i = 2; i < args.size(); i++) {
-                            plies_made++;
                             Square from = create_square(File(args[i][0] - 'a'), Rank(args[i][1] - '1'));
                             Square to = create_square(File(args[i][2] - 'a'), Rank(args[i][3] - '1'));
                             if (((i - 2) % 2) == 0) {
@@ -117,7 +124,6 @@ protected:
                     pos = Position(fen);
                     if (args.size() > 7) {
                         for (size_t i = 8; i < args.size(); i++) {
-                            plies_made++;
                             Square from = create_square(File(args[i][0] - 'a'), Rank(args[i][1] - '1'));
                             Square to = create_square(File(args[i][2] - 'a'), Rank(args[i][3] - '1'));
                             if (((i - 8) % 2) == 0) {
@@ -218,13 +224,12 @@ protected:
 
                 std::chrono::milliseconds search_time = std::chrono::seconds(10);
                 int moves_left;
-                if (plies_made / 2 < 60) {
-                    moves_left = ((-2 / 3) * (plies_made / 2)) + 50;
-                } else if (plies_made / 2 >= 60) {
-                    moves_left = (0.1 * ((float) plies_made / 2 - 60)) + 10;
+                if (pos.game_ply / 2 < 60) {
+                    moves_left = ((-2 / 3) * (pos.game_ply / 2)) + 50;
+                } else if (pos.game_ply / 2 >= 60) {
+                    moves_left = (0.1 * ((float) pos.game_ply / 2 - 60)) + 10;
                 }
 
-                Move best_move;
                 if (pos.turn() == WHITE) {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
@@ -236,7 +241,7 @@ protected:
                         search_time = winc - std::chrono::milliseconds(500);
                     }
 
-                    best_move = find_best_move<WHITE>(this, pos, search_time, pool);
+                    go<WHITE>(this, pos, search_time, pool);
                 } else if (pos.turn() == BLACK) {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
@@ -248,11 +253,10 @@ protected:
                         search_time = binc - std::chrono::milliseconds(500);
                     }
 
-                    best_move = find_best_move<BLACK>(this, pos, search_time, pool);
+                    go<BLACK>(this, pos, search_time, pool);
                 } else {
                     throw std::logic_error("Invalid side to move");
                 }
-                this->move(best_move);
                 break;
             }
 

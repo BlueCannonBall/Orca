@@ -7,7 +7,7 @@
 #include <cmath>
 
 template <Color Us>
-int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMoves& killer_moves, const std::atomic<bool>& stop) {
+int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop) {
     if (stop) {
         return 0;
     }
@@ -32,13 +32,14 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
     }
 
     if (depth == 0) {
-        return quiesce<Us>(pos, alpha, beta, depth - 1, tt, killer_moves, stop);
+        return quiesce<Us>(pos, alpha, beta, depth - 1, stop);
     }
 
     bool in_check = pos.in_check<Us>();
+    bool is_pv = alpha != beta - 1;
 
     // Reverse futility pruning
-    if (depth <= 8 && !in_check) {
+    if (!is_pv && !in_check && depth <= 8) {
         int evaluation = evaluate<Us>(pos);
         if (evaluation - (120 * depth) >= beta) {
             return evaluation;
@@ -56,20 +57,10 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
         pos.undo<Us>(*move);
 
         if (*move == hash_move) {
-            sort_scores[move->from()][move->to()] += piece_values[KING] * 2;
+            sort_scores[move->from()][move->to()] = piece_values[KING] * 2;
+        } else if (is_killer_move<Us>(*move, depth)) {
+            sort_scores[move->from()][move->to()] = piece_values[KING];
         } else {
-            bool is_killer = false;
-            for (unsigned char i = 0; i < 3; i++) {
-                if (*move == killer_moves[Us][depth][i]) {
-                    is_killer = true;
-                    break;
-                }
-            }
-            if (is_killer) {
-                sort_scores[move->from()][move->to()] += piece_values[KING];
-                continue;
-            }
-
             sort_scores[move->from()][move->to()] += move_evaluations[move->from()][move->to()];
 
             if (move->is_castling()) {
@@ -77,12 +68,14 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
             }
             if (move->is_capture()) {
                 sort_scores[move->from()][move->to()] += 15;
+
+                // Static exchange evaluation
                 if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
                     sort_scores[move->from()][move->to()] += see<Us>(pos, *move);
                 }
             }
             if (move->is_promotion()) {
-                sort_scores[move->from()][move->to()] += 30;
+                sort_scores[move->from()][move->to()] += 50;
             }
         }
     }
@@ -108,8 +101,17 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
             reduced_depth -= 2;
         }
 
+        // PVS
+        int score;
         pos.play<Us>(*move);
-        int score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, tt, killer_moves, stop);
+        if (hash_move.is_null() || *move == hash_move) {
+            score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
+        } else {
+            score = -alpha_beta<~Us>(pos, -alpha - 1, -alpha, reduced_depth - 1, stop);score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
+            if (score > alpha) {
+                score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
+            }
+        }
         pos.undo<Us>(*move);
 
         if (stop) {
@@ -120,9 +122,7 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
             best_move = *move;
             if (score >= beta) {
                 if (move->flags() == QUIET) {
-                    killer_moves[Us][depth][2] = killer_moves[Us][depth][1];
-                    killer_moves[Us][depth][1] = killer_moves[Us][depth][0];
-                    killer_moves[Us][depth][0] = *move;
+                    add_killer_move<Us>(*move, depth);
                 }
                 flag = LOWERBOUND;
                 alpha = beta;
@@ -159,7 +159,7 @@ int alpha_beta(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMove
 }
 
 template <Color Us>
-int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const KillerMoves& killer_moves, const std::atomic<bool>& stop) {
+int Finder::quiesce(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop) {
     if (stop) {
         return 0;
     }
@@ -199,16 +199,17 @@ int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const K
             pos.undo<Us>(*move);
 
             if (*move == hash_move) {
-                sort_scores[move->from()][move->to()] += piece_values[KING] * 2;
+                sort_scores[move->from()][move->to()] = piece_values[KING] * 2;
             } else {
                 sort_scores[move->from()][move->to()] += move_evaluations[move->from()][move->to()];
 
+                // Static exchange evaluation
                 if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
                     sort_scores[move->from()][move->to()] += see<Us>(pos, *move);
                 }
 
                 if (move->is_promotion()) {
-                    sort_scores[move->from()][move->to()] += 30;
+                    sort_scores[move->from()][move->to()] += 50;
                 }
             }
         } else {
@@ -230,7 +231,7 @@ int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const K
         }
 
         pos.play<Us>(*move);
-        int score = -quiesce<~Us>(pos, -beta, -alpha, depth - 1, tt, killer_moves, stop);
+        int score = -quiesce<~Us>(pos, -beta, -alpha, depth - 1, stop);
         pos.undo<Us>(*move);
 
         if (stop) {
@@ -248,8 +249,30 @@ int quiesce(Position& pos, int alpha, int beta, int depth, const TT& tt, const K
     return alpha;
 }
 
-template int alpha_beta<WHITE>(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMoves& killer_moves, const std::atomic<bool>& stop);
-template int alpha_beta<BLACK>(Position& pos, int alpha, int beta, int depth, TT& tt, KillerMoves& killer_moves, const std::atomic<bool>& stop);
+template <Color C>
+void Finder::add_killer_move(Move move, int depth) {
+    killer_moves[C][depth][2] = killer_moves[C][depth][1];
+    killer_moves[C][depth][1] = killer_moves[C][depth][0];
+    killer_moves[C][depth][0] = move;
+}
 
-template int quiesce<WHITE>(Position& pos, int alpha, int beta, int depth, const TT& tt, const KillerMoves& killer_moves, const std::atomic<bool>& stop);
-template int quiesce<BLACK>(Position& pos, int alpha, int beta, int depth, const TT& tt, const KillerMoves& killer_moves, const std::atomic<bool>& stop);
+template <Color C>
+bool Finder::is_killer_move(Move move, int depth) const {
+    bool ret = false;
+    for (size_t i = 0; i < 3; i++) {
+        if (move == killer_moves[C][depth][i]) {
+            ret = true;
+            break;
+        }
+    }
+    return ret;
+}
+
+template int Finder::alpha_beta<WHITE>(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop);
+template int Finder::alpha_beta<BLACK>(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop);
+
+template int Finder::quiesce<WHITE>(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop);
+template int Finder::quiesce<BLACK>(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop);
+
+template void Finder::add_killer_move<WHITE>(Move move, int depth);
+template bool Finder::is_killer_move<WHITE>(Move move, int depth) const;

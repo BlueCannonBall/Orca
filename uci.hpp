@@ -20,6 +20,31 @@ namespace uci {
         }
     } // namespace detail
 
+    inline std::string format_move(Move move) {
+        std::ostringstream ss;
+        ss << SQSTR[move.from()] << SQSTR[move.to()];
+        if (move.is_promotion()) {
+            switch (move.promotion()) {
+                case KNIGHT:
+                    ss << 'n';
+                    break;
+                case BISHOP:
+                    ss << 'b';
+                    break;
+                case ROOK:
+                    ss << 'r';
+                    break;
+                case QUEEN:
+                    ss << 'q';
+                    break;
+
+                default:
+                    throw std::logic_error("Invalid promotion");
+            }
+        }
+        return ss.str();
+    }
+
     class Engine {
     private:
         std::string name;
@@ -82,28 +107,12 @@ namespace uci {
             }
         }
 
-        void move(Move move) {
-            std::cout << "bestmove " << SQSTR[move.from()] << SQSTR[move.to()];
-            if (move.is_promotion()) {
-                switch (move.promotion()) {
-                    case KNIGHT:
-                        std::cout << 'n';
-                        break;
-                    case BISHOP:
-                        std::cout << 'b';
-                        break;
-                    case ROOK:
-                        std::cout << 'r';
-                        break;
-                    case QUEEN:
-                        std::cout << 'q';
-                        break;
-
-                    default:
-                        throw std::logic_error("Invalid promotion");
-                }
+        void move(Move best_move, Move ponder_move = Move()) {
+            if (ponder_move.is_null()) {
+                this->send_message("bestmove", {format_move(best_move)});
+            } else {
+                this->send_message("bestmove", {format_move(best_move), "ponder", format_move(ponder_move)});
             }
-            std::cout << std::endl;
         }
 
         virtual ~Engine() { }

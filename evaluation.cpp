@@ -108,7 +108,15 @@ int evaluate(const Position& pos, bool debug) {
                 if (progress == MIDGAME) {
                     pp += color == Us ? 30 : -30;
                 } else if (progress == ENDGAME) {
-                    pp += color == Us ? 150 : -150;
+                    int score = 0;
+                    if (color == WHITE) {
+                        score = (rank_of(sq) - RANK1) * 50;
+                    } else if (color == BLACK) {
+                        score = (RANK8 - rank_of(sq)) * 50;
+                    } else {
+                        throw std::logic_error("Invalid color");
+                    }
+                    pp += color == Us ? score : -score;
                 } else {
                     throw std::logic_error("Invalid game progress");
                 }
@@ -164,8 +172,6 @@ int evaluate(const Position& pos, bool debug) {
 
 template <Color Us>
 int see(const Position& pos, Move move) {
-    assert(move.is_capture());
-
     const Square attacked_sq = move.to();
     Bitboard occ = BOTH_COLOR_CALL(pos.all_pieces);
     Bitboard attackers = BOTH_COLOR_CALL(pos.attackers_from, attacked_sq, occ);
@@ -173,13 +179,12 @@ int see(const Position& pos, Move move) {
     Bitboard orthogonal_sliders = BOTH_COLOR_CALL(pos.orthogonal_sliders);
 
     int ret = 0;
-    PieceType attacked_pc = type_of(pos.at(attacked_sq));
+    PieceType attacked_pc;
 
     {
         const Square attacker_sq = move.from();
         const PieceType attacker_pc = type_of(pos.at(attacker_sq));
 
-        ret += piece_values[attacked_pc];
         occ &= ~SQUARE_BB[attacker_sq];
         attackers &= ~SQUARE_BB[attacker_sq];
         attacked_pc = attacker_pc;
@@ -192,6 +197,10 @@ int see(const Position& pos, Move move) {
             orthogonal_sliders &= ~SQUARE_BB[attacker_sq];
             attackers |= attacks<ROOK>(attacked_sq, occ) & orthogonal_sliders;
         }
+    }
+
+    if (move.is_capture()) {
+        ret += piece_values[pos.at(attacked_sq)];
     }
 
     for (Color side_to_play = ~Us;; side_to_play = ~side_to_play) {
