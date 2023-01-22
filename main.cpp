@@ -6,6 +6,7 @@
 #include "threadpool.hpp"
 #include "uci.hpp"
 #include "util.hpp"
+#include <cmath>
 #include <iostream>
 #include <unordered_map>
 
@@ -243,17 +244,17 @@ protected:
 
                 std::chrono::milliseconds search_time = std::chrono::seconds(10);
                 int moves_left;
-                if (pos.game_ply / 2 < 60) {
-                    moves_left = ((-2 / 3) * (pos.game_ply / 2)) + 50;
-                } else if (pos.game_ply / 2 >= 60) {
-                    moves_left = (0.1 * ((float) pos.game_ply / 2 - 60)) + 10;
+                if ((float) pos.game_ply / 2.f < 60.f) {
+                    moves_left = std::round(((-2.f / 3.f) * ((float) pos.game_ply / 2.f)) + 50.f);
+                } else if ((float) pos.game_ply / 2.f >= 60.f) {
+                    moves_left = std::round((0.1f * ((float) pos.game_ply / 2.f - 60.f)) + 10.f);
                 }
 
                 if (pos.turn() == WHITE) {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
                     } else if (wtime != std::chrono::milliseconds(-1)) {
-                        search_time = std::chrono::milliseconds(wtime.count() / moves_left);
+                        search_time = std::chrono::milliseconds(std::min(wtime.count() / moves_left, 30000l));
                     }
 
                     if (search_time - std::chrono::milliseconds(500) < winc) {
@@ -265,7 +266,7 @@ protected:
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
                     } else if (btime != std::chrono::milliseconds(-1)) {
-                        search_time = std::chrono::milliseconds(btime.count() / moves_left);
+                        search_time = std::chrono::milliseconds(std::min(btime.count() / moves_left, 30000l));
                     }
 
                     if (search_time - std::chrono::milliseconds(500) < binc) {

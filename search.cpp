@@ -107,7 +107,8 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
         if (hash_move.is_null() || *move == hash_move) {
             score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
         } else {
-            score = -alpha_beta<~Us>(pos, -alpha - 1, -alpha, reduced_depth - 1, stop);score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
+            score = -alpha_beta<~Us>(pos, -alpha - 1, -alpha, reduced_depth - 1, stop);
+            score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
             if (score > alpha) {
                 score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
             }
@@ -259,7 +260,7 @@ void Finder::add_killer_move(Move move, int depth) {
 template <Color C>
 bool Finder::is_killer_move(Move move, int depth) const {
     bool ret = false;
-    for (size_t i = 0; i < 3; i++) {
+    for (unsigned char i = 0; i < 3; i++) {
         if (move == killer_moves[C][depth][i]) {
             ret = true;
             break;

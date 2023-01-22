@@ -34,7 +34,7 @@ public:
 
 typedef std::unordered_map<uint64_t, TTEntry> TT;
 typedef Move KillerMoves[NCOLORS][256][3];
-typedef std::unordered_map<uint64_t, unsigned int> RT;
+typedef std::unordered_map<uint64_t, unsigned short> RT;
 
 class Finder {
 public:
