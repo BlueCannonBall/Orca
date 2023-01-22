@@ -87,12 +87,12 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                     finder.max_depth = current_depth;
 
                     pos.play<Us>(*move);
-                    int score = -finder.alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, stop);
+                    int score;
                     RT::const_iterator entry_it;
-                    if ((entry_it = rt.find(pos.get_hash())) != rt.end()) {
-                        if (entry_it->second + 1 >= 3) {
-                            score = 0;
-                        }
+                    if ((entry_it = rt.find(pos.get_hash())) != rt.end() && entry_it->second + 1 >= 3) {
+                        score = 0;
+                    } else {
+                        score = -finder.alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, stop);
                     }
                     pos.undo<Us>(*move);
 
