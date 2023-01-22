@@ -34,6 +34,7 @@ public:
 
 typedef std::unordered_map<uint64_t, TTEntry> TT;
 typedef Move KillerMoves[NCOLORS][256][3];
+typedef std::unordered_map<uint64_t, unsigned int> RT;
 
 class Finder {
 public:
@@ -59,7 +60,7 @@ protected:
 };
 
 template <Color Us, typename DurationT>
-void go(uci::Engine* engine, Position& pos, DurationT search_time, tp::ThreadPool& pool) {
+void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt, tp::ThreadPool& pool) {
     Move moves[218];
     Move* last_move = pos.generate_legals<Us>(moves);
     if (last_move - moves == 1) {
@@ -72,7 +73,7 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, tp::ThreadPoo
     Move ponder_move;
     std::atomic<bool> stop(false);
 
-    std::thread deepening_thread([engine, &pos, &pool, &moves, last_move, &finders, &best_move, &ponder_move, &stop]() {
+    std::thread deepening_thread([engine, &pos, &rt, &pool, &moves, last_move, &finders, &best_move, &ponder_move, &stop]() {
         std::vector<std::shared_ptr<tp::Task>> tasks;
         for (int current_depth = 2; !stop && pos.game_ply + current_depth < 2048; current_depth++) {
             std::mutex mtx;
@@ -81,35 +82,19 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, tp::ThreadPoo
             unsigned long long nodes = 0;
 
             for (Move* move = moves; move != last_move; move++) {
-                tasks.push_back(pool.schedule([pos, &moves, &finders, current_depth, move, &mtx, &current_best_move, &best_move_score, &stop](void*) mutable {
+                tasks.push_back(pool.schedule([pos, &rt, &moves, &finders, current_depth, move, &mtx, &current_best_move, &best_move_score, &stop](void*) mutable {
                     Finder& finder = finders[move - moves];
                     finder.max_depth = current_depth;
 
                     pos.play<Us>(*move);
                     int score = -finder.alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, current_depth - 1, stop);
-                    pos.undo<Us>(*move);
-
-                    Position current_pos = pos;
-                    Move current_move = *move;
-                    bool repetition = true;
-                    for (Color side_to_move = Us; current_pos.game_ply < pos.game_ply + current_depth; side_to_move = ~side_to_move) {
-                        DYN_COLOR_CALL(current_pos.play, side_to_move, current_move);
-                        TT::const_iterator entry_it;
-                        if ((entry_it = finder.tt.find(current_pos.get_hash())) != finder.tt.end()) {
-                            if (entry_it->second.best_move.is_null()) {
-                                repetition = false;
-                                break;
-                            } else {
-                                current_move = entry_it->second.best_move;
-                            }
-                        } else {
-                            repetition = false;
-                            break;
+                    RT::const_iterator entry_it;
+                    if ((entry_it = rt.find(pos.get_hash())) != rt.end()) {
+                        if (entry_it->second + 1 >= 3) {
+                            score = 0;
                         }
                     }
-                    if (repetition) {
-                        score = 0;
-                    }
+                    pos.undo<Us>(*move);
 
                     if (!stop) {
                         mtx.lock();

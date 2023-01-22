@@ -1,16 +1,18 @@
 #include "evaluation.hpp"
+#include "logger.hpp"
 #include "search.hpp"
 #include "surge/src/position.h"
 #include "surge/src/types.h"
 #include "threadpool.hpp"
-#include "logger.hpp"
 #include "uci.hpp"
 #include "util.hpp"
 #include <iostream>
+#include <unordered_map>
 
 class Engine: public uci::Engine {
 protected:
     Position pos;
+    RT rt;
     tp::ThreadPool pool;
     Logger logger;
 
@@ -36,8 +38,10 @@ protected:
         str_switch(command) {
             str_case("position") :
             {
+                rt.clear();
                 if (args[0] == "startpos") {
                     pos = Position(DEFAULT_FEN);
+                    rt[pos.get_hash()] = 1;
                     if (args.size() > 1) {
                         for (size_t i = 2; i < args.size(); i++) {
                             Square from = create_square(File(args[i][0] - 'a'), Rank(args[i][1] - '1'));
@@ -111,6 +115,13 @@ protected:
                                 }
                                 pos.play<BLACK>(Move(from, to, m_flags));
                             }
+
+                            RT::iterator entry_it;
+                            if ((entry_it = rt.find(pos.get_hash())) != rt.end()) {
+                                entry_it->second++;
+                            } else {
+                                rt[pos.get_hash()] = 1;
+                            }
                         }
                     }
                 } else if (args[0] == "fen") {
@@ -122,6 +133,7 @@ protected:
                         }
                     }
                     pos = Position(fen);
+                    rt[pos.get_hash()] = 1;
                     if (args.size() > 7) {
                         for (size_t i = 8; i < args.size(); i++) {
                             Square from = create_square(File(args[i][0] - 'a'), Rank(args[i][1] - '1'));
@@ -195,6 +207,13 @@ protected:
                                 }
                                 pos.play<BLACK>(Move(from, to, m_flags));
                             }
+
+                            RT::iterator entry_it;
+                            if ((entry_it = rt.find(pos.get_hash())) != rt.end()) {
+                                entry_it->second++;
+                            } else {
+                                rt[pos.get_hash()] = 1;
+                            }
                         }
                     }
                 }
@@ -241,7 +260,7 @@ protected:
                         search_time = winc - std::chrono::milliseconds(500);
                     }
 
-                    go<WHITE>(this, pos, search_time, pool);
+                    go<WHITE>(this, pos, search_time, rt, pool);
                 } else if (pos.turn() == BLACK) {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
@@ -253,7 +272,7 @@ protected:
                         search_time = binc - std::chrono::milliseconds(500);
                     }
 
-                    go<BLACK>(this, pos, search_time, pool);
+                    go<BLACK>(this, pos, search_time, rt, pool);
                 } else {
                     throw std::logic_error("Invalid side to move");
                 }
