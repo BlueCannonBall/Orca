@@ -24,10 +24,6 @@ public:
         logger("/tmp/orca.log") { }
 
 protected:
-    void declare_options() override {
-        this->send_message("option", {"name", "UCI_Chess960", "type", "check", "default", "false"});
-    }
-
     void on_message(const std::string& command, const std::vector<std::string>& args) override {
         std::string full_line;
         full_line += command;
@@ -45,76 +41,10 @@ protected:
                     rt[pos.get_hash()] = 1;
                     if (args.size() > 1) {
                         for (size_t i = 2; i < args.size(); i++) {
-                            Square from = create_square(File(args[i][0] - 'a'), Rank(args[i][1] - '1'));
-                            Square to = create_square(File(args[i][2] - 'a'), Rank(args[i][3] - '1'));
                             if (((i - 2) % 2) == 0) {
-                                MoveFlags m_flags = generate_move_flags<WHITE>(pos, from, to);
-                                if (m_flags == PROMOTIONS) {
-                                    switch (args[i][4]) {
-                                        case 'n':
-                                            m_flags = PR_KNIGHT;
-                                            break;
-                                        case 'b':
-                                            m_flags = PR_BISHOP;
-                                            break;
-                                        case 'r':
-                                            m_flags = PR_ROOK;
-                                            break;
-                                        case 'q':
-                                            m_flags = PR_QUEEN;
-                                            break;
-                                    }
-                                } else if (m_flags == PROMOTION_CAPTURES) {
-                                    switch (args[i][4]) {
-                                        case 'n':
-                                            m_flags = PC_KNIGHT;
-                                            break;
-                                        case 'b':
-                                            m_flags = PC_BISHOP;
-                                            break;
-                                        case 'r':
-                                            m_flags = PC_ROOK;
-                                            break;
-                                        case 'q':
-                                            m_flags = PC_QUEEN;
-                                            break;
-                                    }
-                                }
-                                pos.play<WHITE>(Move(from, to, m_flags));
+                                pos.play<WHITE>(uci::parse_move<WHITE>(pos, args[i]));
                             } else {
-                                MoveFlags m_flags = generate_move_flags<BLACK>(pos, from, to);
-                                if (m_flags == PROMOTIONS) {
-                                    switch (args[i][4]) {
-                                        case 'n':
-                                            m_flags = PR_KNIGHT;
-                                            break;
-                                        case 'b':
-                                            m_flags = PR_BISHOP;
-                                            break;
-                                        case 'r':
-                                            m_flags = PR_ROOK;
-                                            break;
-                                        case 'q':
-                                            m_flags = PR_QUEEN;
-                                            break;
-                                    }
-                                } else if (m_flags == PROMOTION_CAPTURES) {
-                                    switch (args[i][4]) {
-                                        case 'n':
-                                            m_flags = PC_KNIGHT;
-                                            break;
-                                        case 'b':
-                                            m_flags = PC_BISHOP;
-                                            break;
-                                        case 'r':
-                                            m_flags = PC_ROOK;
-                                            break;
-                                        case 'q':
-                                            m_flags = PC_QUEEN;
-                                            break;
-                                    }
-                                }
-                                pos.play<BLACK>(Move(from, to, m_flags));
+                                pos.play<BLACK>(uci::parse_move<BLACK>(pos, args[i]));
                             }
 
                             RT::iterator entry_it;
@@ -137,76 +67,10 @@ protected:
                     rt[pos.get_hash()] = 1;
                     if (args.size() > 7) {
                         for (size_t i = 8; i < args.size(); i++) {
-                            Square from = create_square(File(args[i][0] - 'a'), Rank(args[i][1] - '1'));
-                            Square to = create_square(File(args[i][2] - 'a'), Rank(args[i][3] - '1'));
                             if (((i - 8) % 2) == 0) {
-                                MoveFlags m_flags = generate_move_flags<WHITE>(pos, from, to);
-                                if (m_flags == PROMOTIONS) {
-                                    switch (args[i][4]) {
-                                        case 'n':
-                                            m_flags = PR_KNIGHT;
-                                            break;
-                                        case 'b':
-                                            m_flags = PR_BISHOP;
-                                            break;
-                                        case 'r':
-                                            m_flags = PR_ROOK;
-                                            break;
-                                        case 'q':
-                                            m_flags = PR_QUEEN;
-                                            break;
-                                    }
-                                } else if (m_flags == PROMOTION_CAPTURES) {
-                                    switch (args[i][4]) {
-                                        case 'n':
-                                            m_flags = PC_KNIGHT;
-                                            break;
-                                        case 'b':
-                                            m_flags = PC_BISHOP;
-                                            break;
-                                        case 'r':
-                                            m_flags = PC_ROOK;
-                                            break;
-                                        case 'q':
-                                            m_flags = PC_QUEEN;
-                                            break;
-                                    }
-                                }
-                                pos.play<WHITE>(Move(from, to, m_flags));
+                                pos.play<WHITE>(uci::parse_move<WHITE>(pos, args[i]));
                             } else {
-                                MoveFlags m_flags = generate_move_flags<BLACK>(pos, from, to);
-                                if (m_flags == PROMOTIONS) {
-                                    switch (args[i][4]) {
-                                        case 'n':
-                                            m_flags = PR_KNIGHT;
-                                            break;
-                                        case 'b':
-                                            m_flags = PR_BISHOP;
-                                            break;
-                                        case 'r':
-                                            m_flags = PR_ROOK;
-                                            break;
-                                        case 'q':
-                                            m_flags = PR_QUEEN;
-                                            break;
-                                    }
-                                } else if (m_flags == PROMOTION_CAPTURES) {
-                                    switch (args[i][4]) {
-                                        case 'n':
-                                            m_flags = PC_KNIGHT;
-                                            break;
-                                        case 'b':
-                                            m_flags = PC_BISHOP;
-                                            break;
-                                        case 'r':
-                                            m_flags = PC_ROOK;
-                                            break;
-                                        case 'q':
-                                            m_flags = PC_QUEEN;
-                                            break;
-                                    }
-                                }
-                                pos.play<BLACK>(Move(from, to, m_flags));
+                                pos.play<BLACK>(uci::parse_move<BLACK>(pos, args[i]));
                             }
 
                             RT::iterator entry_it;

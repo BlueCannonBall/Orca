@@ -1,6 +1,8 @@
 #pragma once
 
 #include "surge/src/position.h"
+#include "surge/src/types.h"
+#include "util.hpp"
 #include <boost/algorithm/string.hpp>
 #include <iostream>
 #include <string>
@@ -43,6 +45,45 @@ namespace uci {
             }
         }
         return ss.str();
+    }
+
+    template <Color C>
+    inline Move parse_move(const Position& pos, const std::string& str) {
+        Square from = create_square(File(str[0] - 'a'), Rank(str[1] - '1'));
+        Square to = create_square(File(str[2] - 'a'), Rank(str[3] - '1'));
+        MoveFlags flags = generate_move_flags<C>(pos, from, to);
+        if (flags == PROMOTIONS) {
+            switch (str[4]) {
+                case 'n':
+                    flags = PR_KNIGHT;
+                    break;
+                case 'b':
+                    flags = PR_BISHOP;
+                    break;
+                case 'r':
+                    flags = PR_ROOK;
+                    break;
+                case 'q':
+                    flags = PR_QUEEN;
+                    break;
+            }
+        } else if (flags == PROMOTION_CAPTURES) {
+            switch (str[4]) {
+                case 'n':
+                    flags = PC_KNIGHT;
+                    break;
+                case 'b':
+                    flags = PC_BISHOP;
+                    break;
+                case 'r':
+                    flags = PC_ROOK;
+                    break;
+                case 'q':
+                    flags = PC_QUEEN;
+                    break;
+            }
+        }
+        return Move(from, to, flags);
     }
 
     class Engine {

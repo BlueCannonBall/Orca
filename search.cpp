@@ -108,7 +108,6 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
             score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
         } else {
             score = -alpha_beta<~Us>(pos, -alpha - 1, -alpha, reduced_depth - 1, stop);
-            score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
             if (score > alpha) {
                 score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
             }

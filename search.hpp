@@ -70,16 +70,15 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
     std::vector<Finder> finders(last_move - moves);
 
     Move best_move;
-    Move ponder_move;
+    std::atomic<bool> produced_move(false);
     std::atomic<bool> stop(false);
 
-    std::thread deepening_thread([engine, &pos, &rt, &pool, &moves, last_move, &finders, &best_move, &ponder_move, &stop]() {
+    std::thread deepening_thread([engine, &pos, &rt, &pool, &moves, last_move, &finders, &best_move, &produced_move, &stop]() {
         std::vector<std::shared_ptr<tp::Task>> tasks;
         for (int depth = 2; !stop && pos.game_ply + depth < 2048; depth++) {
             std::mutex mtx;
             Move current_best_move;
             int best_move_score = INT_MIN;
-            unsigned long long nodes = 0;
 
             for (Move* move = moves; move != last_move; move++) {
                 tasks.push_back(pool.schedule([pos, &rt, &moves, &finders, depth, move, &mtx, &current_best_move, &best_move_score, &stop](void*) mutable {
@@ -89,7 +88,7 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                     pos.play<Us>(*move);
                     int score;
                     RT::const_iterator entry_it;
-                    if ((entry_it = rt.find(pos.get_hash())) != rt.end() && entry_it->second + 1 >= 3) {
+                    if ((entry_it = rt.find(pos.get_hash())) != rt.end() && entry_it->second + 1 == 3) {
                         score = 0;
                     } else {
                         score = -finder.alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, depth - 1, stop);
@@ -116,6 +115,7 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
 
             if (!stop) {
                 best_move = current_best_move;
+                unsigned long long nodes = 0;
                 for (const auto& finder : finders) {
                     nodes += finder.tt.size();
                 }
@@ -135,9 +135,6 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                             break;
                         } else {
                             current_move = entry_it->second.best_move;
-                            if (pv.size() == 1) {
-                                ponder_move = current_move;
-                            }
                         }
                     } else {
                         break;
@@ -147,14 +144,15 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                 std::vector<std::string> args = {"depth", std::to_string(depth), "score", "cp", std::to_string(best_move_score), "nodes", std::to_string(nodes), "pv"};
                 args.insert(args.end(), pv.begin(), pv.end());
                 engine->send_message("info", args);
+                produced_move = true;
             }
         }
     });
 
     std::this_thread::sleep_for(search_time);
-    while (best_move.is_null()) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+    while (!produced_move) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
     stop = true;
     deepening_thread.join();
 
-    engine->move(best_move, ponder_move);
+    engine->move(best_move);
 }
