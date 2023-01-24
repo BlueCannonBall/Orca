@@ -56,8 +56,13 @@ int evaluate(const Position& pos, bool debug) {
             table.push(Math.round(distance(x, y, 3.5, 3.5) * 20));
         }
     }
+
+    table[0] = Math.round(distance(1, 6, 3.5, 3.5) * 20);
+    table[7] = Math.round(distance(6, 6, 3.5, 3.5) * 20);
+    table[56] = Math.round(distance(1, 1, 3.5, 3.5) * 20);
+    table[63] = Math.round(distance(6, 1, 3.5, 3.5) * 20);
     */
-    static constexpr int king_pcsq_table[64] = {99, 86, 76, 71, 71, 76, 86, 99, 86, 71, 58, 51, 51, 58, 71, 86, 76, 58, 42, 32, 32, 42, 58, 76, 71, 51, 32, 14, 14, 32, 51, 71, 71, 51, 32, 14, 14, 32, 51, 71, 76, 58, 42, 32, 32, 42, 58, 76, 86, 71, 58, 51, 51, 58, 71, 86, 99, 86, 76, 71, 71, 76, 86, 99};
+    static constexpr int king_pcsq_table[64] = {71, 86, 76, 71, 71, 76, 86, 71, 86, 71, 58, 51, 51, 58, 71, 86, 76, 58, 42, 32, 32, 42, 58, 76, 71, 51, 32, 14, 14, 32, 51, 71, 71, 51, 32, 14, 14, 32, 51, 71, 76, 58, 42, 32, 32, 42, 58, 76, 86, 71, 58, 51, 51, 58, 71, 86, 71, 86, 76, 71, 71, 76, 86, 71};
     int kp = 0;
     if (progress == MIDGAME) {
         kp += king_pcsq_table[bsf(pos.bitboard_of(Us, KING))];

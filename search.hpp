@@ -85,13 +85,30 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                     Finder& finder = finders[move - moves];
                     finder.max_depth = depth;
 
-                    pos.play<Us>(*move);
                     int score;
+                    pos.play<Us>(*move);
                     RT::const_iterator entry_it;
                     if ((entry_it = rt.find(pos.get_hash())) != rt.end() && entry_it->second + 1 == 3) {
                         score = 0;
                     } else {
-                        score = -finder.alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, depth - 1, stop);
+                        bool repetition = false;
+                        Move nested_moves[218];
+                        Move* last_nested_move = pos.generate_legals<~Us>(nested_moves);
+                        for (Move* nested_move = nested_moves; nested_move != last_nested_move; nested_move++) {
+                            RT::const_iterator nested_entry_it;
+                            pos.play<~Us>(*nested_move);
+                            if ((nested_entry_it = rt.find(pos.get_hash())) != rt.end() && nested_entry_it->second + 1 == 3) {
+                                repetition = true;
+                                pos.undo<~Us>(*nested_move);
+                                break;
+                            }
+                            pos.undo<~Us>(*nested_move);
+                        }
+                        if (repetition) {
+                            score = 0;
+                        } else {
+                            score = -finder.alpha_beta<~Us>(pos, -piece_values[KING] * 2, piece_values[KING] * 2, depth - 1, stop);
+                        }
                     }
                     pos.undo<Us>(*move);
 

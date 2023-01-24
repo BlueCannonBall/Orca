@@ -24,6 +24,10 @@ public:
         logger("/tmp/orca.log") { }
 
 protected:
+    void declare_options() override {
+        this->send_message("option", {"name", "UCI_AnalyseMode", "type", "check", "default", "false"});
+    }
+
     void on_message(const std::string& command, const std::vector<std::string>& args) override {
         std::string full_line;
         full_line += command;
