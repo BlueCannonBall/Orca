@@ -75,7 +75,7 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
 
     std::thread deepening_thread([engine, &pos, &rt, &pool, &moves, last_move, &finders, &best_move, &produced_move, &stop]() {
         std::vector<std::shared_ptr<tp::Task>> tasks;
-        for (int depth = 2; !stop && pos.game_ply + depth < 2048; depth++) {
+        for (int depth = 1; !stop && pos.game_ply + depth < 2048; depth++) {
             std::mutex mtx;
             Move current_best_move;
             int best_move_score = INT_MIN;
@@ -132,7 +132,7 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
 
             if (!stop) {
                 best_move = current_best_move;
-                unsigned long long nodes = 0;
+                unsigned long long nodes = last_move - moves;
                 for (const auto& finder : finders) {
                     nodes += finder.tt.size();
                 }

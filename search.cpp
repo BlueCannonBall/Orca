@@ -35,6 +35,13 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
         return quiesce<Us>(pos, alpha, beta, depth - 1, stop);
     }
 
+    int mate_value = piece_values[KING] + depth;
+    alpha = std::max(alpha, -mate_value);
+    beta = std::min(beta, mate_value + 1);
+    if (alpha >= beta) {
+        return alpha;
+    }
+
     bool in_check = pos.in_check<Us>();
     bool is_pv = alpha != beta - 1;
 
@@ -87,7 +94,7 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
     TTEntryFlag flag = UPPERBOUND;
     for (const Move* move = moves; move != last_move; move++) {
         // Futility pruning
-        if (depth == 1 && !move->is_capture() && !in_check && move_evaluations[move->from()][move->to()] + 200 <= alpha) {
+        if (depth == 1 && move->flags() == QUIET && !in_check && move_evaluations[move->from()][move->to()] + 200 <= alpha) {
             continue;
         }
         // Razoring
@@ -135,7 +142,7 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
 
     if (moves == last_move) {
         if (in_check) {
-            alpha = -piece_values[KING] - depth;
+            alpha = -mate_value;
         } else {
             alpha = 0;
         }

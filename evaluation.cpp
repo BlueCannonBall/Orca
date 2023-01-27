@@ -9,7 +9,7 @@ int evaluate(const Position& pos, bool debug) {
     int mv = 0;
     int our_mv = 0;
     int their_mv = 0;
-    for (PieceType i = PAWN; i < NPIECE_TYPES - 1; ++i) {
+    for (PieceType i = PAWN; i < NPIECE_TYPES; ++i) {
         our_mv += pop_count(pos.bitboard_of(Us, i)) * piece_values[i];
         their_mv += pop_count(pos.bitboard_of(~Us, i)) * piece_values[i];
     }
