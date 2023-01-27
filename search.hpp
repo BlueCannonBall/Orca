@@ -5,7 +5,6 @@
 #include "surge/src/types.h"
 #include "threadpool.hpp"
 #include "uci.hpp"
-#include "util.hpp"
 #include <atomic>
 #include <climits>
 #include <thread>
