@@ -36,9 +36,9 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
         return quiesce<Us>(pos, alpha, beta, depth - 1, stop);
     }
 
-    int mate_value = piece_values[KING] + depth;
+    int mate_value = piece_values[KING] - this->max_depth - depth;
     alpha = std::max(alpha, -mate_value);
-    beta = std::min(beta, mate_value + 1);
+    beta = std::min(beta, mate_value - 1);
     if (alpha >= beta) {
         return alpha;
     }
@@ -192,7 +192,7 @@ int Finder::quiesce(Position& pos, int alpha, int beta, int depth, const std::at
 
     if (moves == last_move) {
         if (in_check) {
-            return -piece_values[KING] - depth;
+            return -piece_values[KING] + this->max_depth + depth;
         } else {
             return 0;
         }
