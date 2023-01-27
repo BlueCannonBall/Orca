@@ -26,19 +26,10 @@ int evaluate(const Position& pos, bool debug) {
 
     // Center control
     int cc = 0;
-    if (progress == MIDGAME) {
-        if (pos.at(d5) != NO_PIECE && type_of(pos.at(d5)) != KING) cc += (color_of(pos.at(d5)) == Us) ? 25 : -25;
-        if (pos.at(e5) != NO_PIECE && type_of(pos.at(e5)) != KING) cc += (color_of(pos.at(e5)) == Us) ? 25 : -25;
-        if (pos.at(d4) != NO_PIECE && type_of(pos.at(d4)) != KING) cc += (color_of(pos.at(d4)) == Us) ? 25 : -25;
-        if (pos.at(e4) != NO_PIECE && type_of(pos.at(e4)) != KING) cc += (color_of(pos.at(e4)) == Us) ? 25 : -25;
-    } else if (progress == ENDGAME) {
-        if (pos.at(d5) != NO_PIECE) cc += (color_of(pos.at(d5)) == Us) ? 25 : -25;
-        if (pos.at(e5) != NO_PIECE) cc += (color_of(pos.at(e5)) == Us) ? 25 : -25;
-        if (pos.at(d4) != NO_PIECE) cc += (color_of(pos.at(d4)) == Us) ? 25 : -25;
-        if (pos.at(e4) != NO_PIECE) cc += (color_of(pos.at(e4)) == Us) ? 25 : -25;
-    } else {
-        throw std::logic_error("Invalid game progress");
-    }
+    if (pos.at(d5) != NO_PIECE) cc += (color_of(pos.at(d5)) == Us) ? 25 : -25;
+    if (pos.at(e5) != NO_PIECE) cc += (color_of(pos.at(e5)) == Us) ? 25 : -25;
+    if (pos.at(d4) != NO_PIECE) cc += (color_of(pos.at(d4)) == Us) ? 25 : -25;
+    if (pos.at(e4) != NO_PIECE) cc += (color_of(pos.at(e4)) == Us) ? 25 : -25;
 
     // Knight placement
     int np = 0;
@@ -250,12 +241,42 @@ int mvv_lva(const Position& pos, Move move) {
     assert(move.is_capture());
 
     static constexpr int scores[NPIECE_TYPES * NPIECE_TYPES] = {
-        105, 104, 103, 102, 101, 100,
-        205, 204, 203, 202, 201, 200,
-        305, 304, 303, 302, 301, 300,
-        405, 404, 403, 402, 401, 400,
-        505, 504, 503, 502, 501, 500,
-        605, 604, 603, 602, 601, 600,
+        105,
+        104,
+        103,
+        102,
+        101,
+        100,
+        205,
+        204,
+        203,
+        202,
+        201,
+        200,
+        305,
+        304,
+        303,
+        302,
+        301,
+        300,
+        405,
+        404,
+        403,
+        402,
+        401,
+        400,
+        505,
+        504,
+        503,
+        502,
+        501,
+        500,
+        605,
+        604,
+        603,
+        602,
+        601,
+        600,
     };
 
     if (move.flags() == EN_PASSANT) {
