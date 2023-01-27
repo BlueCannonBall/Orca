@@ -74,12 +74,13 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
                 sort_scores[move->from()][move->to()] += 5;
             }
             if (move->is_capture()) {
-                sort_scores[move->from()][move->to()] += 15;
+                sort_scores[move->from()][move->to()] += mvv_lva(pos, *move);
 
                 // Static exchange evaluation
                 if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
                     sort_scores[move->from()][move->to()] += see<Us>(pos, *move);
                 }
+
             }
             if (move->is_promotion()) {
                 sort_scores[move->from()][move->to()] += 50;
@@ -209,6 +210,8 @@ int Finder::quiesce(Position& pos, int alpha, int beta, int depth, const std::at
                 sort_scores[move->from()][move->to()] = piece_values[KING] * 2;
             } else {
                 sort_scores[move->from()][move->to()] += move_evaluations[move->from()][move->to()];
+
+                sort_scores[move->from()][move->to()] += mvv_lva(pos, *move);
 
                 // Static exchange evaluation
                 if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {

@@ -8,3 +8,5 @@ int evaluate(const Position& pos, bool debug = false);
 
 template <Color Us>
 int see(const Position& pos, Move move);
+
+int mvv_lva(const Position& pos, Move move);

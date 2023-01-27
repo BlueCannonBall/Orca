@@ -1,4 +1,5 @@
 #include "evaluation.hpp"
+#include "surge/src/types.h"
 #include "util.hpp"
 #include <cassert>
 #include <iostream>
@@ -243,6 +244,25 @@ int see(const Position& pos, Move move) {
     }
 
     return ret;
+}
+
+int mvv_lva(const Position& pos, Move move) {
+    assert(move.is_capture());
+
+    static constexpr int scores[NPIECE_TYPES * NPIECE_TYPES] = {
+        105, 104, 103, 102, 101, 100,
+        205, 204, 203, 202, 201, 200,
+        305, 304, 303, 302, 301, 300,
+        405, 404, 403, 402, 401, 400,
+        505, 504, 503, 502, 501, 500,
+        605, 604, 603, 602, 601, 600,
+    };
+
+    if (move.flags() == EN_PASSANT) {
+        return scores[PAWN * NPIECE_TYPES + PAWN];
+    } else {
+        return scores[type_of(pos.at(move.to())) * NPIECE_TYPES + type_of(pos.at(move.from()))];
+    }
 }
 
 template int evaluate<WHITE>(const Position& pos, bool debug);
