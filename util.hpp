@@ -8,15 +8,6 @@
     color == WHITE ? function<WHITE>(__VA_ARGS__) : function<BLACK>(__VA_ARGS__); \
 })
 
-constexpr int piece_values[NPIECE_TYPES] = {
-    100,    // PAWN
-    300,    // KNIGHT
-    300,    // BISHOP
-    500,    // ROOK
-    900,    // QUEEN
-    2000000 // KING
-};
-
 enum GameProgress {
     MIDGAME,
     ENDGAME

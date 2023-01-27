@@ -1,5 +1,6 @@
 #pragma once
 
+#include "evaluation.hpp"
 #include "surge/src/position.h"
 #include "surge/src/types.h"
 #include "threadpool.hpp"
@@ -40,7 +41,7 @@ class Finder {
 public:
     int max_depth;
     TT tt;
-    KillerMoves killer_moves;
+    KillerMoves killer_moves = {{{0}}};
 
     Finder(int max_depth = 0) :
         max_depth(max_depth) { }

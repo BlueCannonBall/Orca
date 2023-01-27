@@ -1,6 +1,7 @@
 #include "search.hpp"
 #include "evaluation.hpp"
 #include "surge/src/types.h"
+#include "util.hpp"
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -56,8 +57,8 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
     Move moves[218];
     Move* last_move = pos.generate_legals<Us>(moves);
 
-    int move_evaluations[64][64] = {{0}};
-    int sort_scores[64][64] = {{0}};
+    int move_evaluations[NSQUARES][NSQUARES] = {{0}};
+    int sort_scores[NSQUARES][NSQUARES] = {{0}};
     for (const Move* move = moves; move != last_move; move++) {
         pos.play<Us>(*move);
         move_evaluations[move->from()][move->to()] = evaluate<Us>(pos);
@@ -80,7 +81,6 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
                 if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
                     sort_scores[move->from()][move->to()] += see<Us>(pos, *move);
                 }
-
             }
             if (move->is_promotion()) {
                 sort_scores[move->from()][move->to()] += 50;
@@ -198,8 +198,8 @@ int Finder::quiesce(Position& pos, int alpha, int beta, int depth, const std::at
         }
     }
 
-    int move_evaluations[64][64] = {{0}};
-    int sort_scores[64][64] = {{0}};
+    int move_evaluations[NSQUARES][NSQUARES] = {{0}};
+    int sort_scores[NSQUARES][NSQUARES] = {{0}};
     for (const Move* move = moves; move != last_move; move++) {
         if (move->is_capture()) {
             pos.play<Us>(*move);
