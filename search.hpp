@@ -92,17 +92,16 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                         score = 0;
                     } else {
                         bool repetition = false;
-                        Move nested_moves[218];
-                        Move* last_nested_move = pos.generate_legals<~Us>(nested_moves);
-                        for (Move* nested_move = nested_moves; nested_move != last_nested_move; nested_move++) {
+                        MoveList<~Us> nested_moves(pos);
+                        for (Move nested_move : nested_moves) {
                             RT::const_iterator nested_entry_it;
-                            pos.play<~Us>(*nested_move);
+                            pos.play<~Us>(nested_move);
                             if ((nested_entry_it = rt.find(pos.get_hash())) != rt.end() && nested_entry_it->second + 1 == 3) {
                                 repetition = true;
-                                pos.undo<~Us>(*nested_move);
+                                pos.undo<~Us>(nested_move);
                                 break;
                             }
-                            pos.undo<~Us>(*nested_move);
+                            pos.undo<~Us>(nested_move);
                         }
                         if (repetition) {
                             score = 0;
