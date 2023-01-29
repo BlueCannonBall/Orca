@@ -13,7 +13,7 @@
 #include <thread>
 #include <vector>
 
-void worker(boost::fibers::unbuffered_channel<Search>& channel, const std::atomic<bool>& stop) {
+void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool>& stop) {
     tp::ThreadPool pool;
     Search search;
     while (channel.pop(search) == boost::fibers::channel_op_status::success) {
@@ -48,7 +48,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, const std::atomi
         for (int depth = 1; !is_stopping() && search.pos.game_ply + depth < 2048; depth++) {
             for (Move* move = moves; move != last_move; move++) {
                 Move current_move = *move;
-                tasks.push_back(pool.schedule([us, depth, current_move, &mtx, &best_move, &best_move_score](void* data) mutable {
+                tasks.push_back(pool.schedule([us, depth, current_move, &mtx, &best_move, &best_move_score](void* data) {
                     Finder* finder = (Finder*) data;
 
                     int score;
@@ -124,9 +124,9 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, const std::atomi
 
                 std::vector<std::string> args;
                 if (best_move_score >= piece_values[KING]) {
-                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string((depth - (best_move_score - piece_values[KING])) / 2.f), "nodes", std::to_string(nodes), "pv"};
+                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string(std::ceil((depth - (best_move_score - piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
                 } else if (best_move_score <= -piece_values[KING]) {
-                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string((-depth + std::abs(best_move_score + piece_values[KING])) / 2.f), "nodes", std::to_string(nodes), "pv"};
+                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string(std::ceil((-depth + std::abs(best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
                 } else {
                     args = std::vector<std::string> {"depth", std::to_string(depth), "score", "cp", std::to_string(best_move_score), "nodes", std::to_string(nodes), "pv"};
                 }
@@ -136,6 +136,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, const std::atomi
         }
 
         uci::bestmove(best_move);
+        stop.store(false, std::memory_order_relaxed);
     }
 }
 
