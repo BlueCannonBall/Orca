@@ -144,6 +144,20 @@ int evaluate(const Position& pos, bool debug) {
         }
     }
 
+    // Open files
+    int of = 0;
+    for (Color color = WHITE; color < NCOLORS; ++color) {
+        Bitboard orthogonal_sliders = DYN_COLOR_CALL(pos.orthogonal_sliders, color);
+        while (orthogonal_sliders) {
+            Square sq = pop_lsb(&orthogonal_sliders);
+            File file = file_of(sq);
+            Bitboard pawns = (pos.bitboard_of(WHITE_PAWN) | pos.bitboard_of(BLACK_PAWN)) & MASK_FILE[file];
+            if (pawns) {
+                of += color == Us ? -10 : 10;
+            }
+        }
+    }
+
     // Check status
     int cs = 0;
     if (pos.in_check<Us>()) {
@@ -162,9 +176,10 @@ int evaluate(const Position& pos, bool debug) {
         std::cerr << "Doubled pawns: " << dp << std::endl;
         std::cerr << "Passed pawns: " << pp << std::endl;
         std::cerr << "Isolated pawns: " << ip << std::endl;
+        std::cerr << "Open files: " << of << std::endl;
         std::cerr << "Check status: " << cs << std::endl;
     }
-    return mv + ca + cc + np + kp + dp + pp + ip + cs;
+    return mv + ca + cc + np + kp + dp + pp + ip + of + cs;
 }
 
 template <Color Us>
