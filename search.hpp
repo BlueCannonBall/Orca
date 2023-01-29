@@ -40,7 +40,7 @@ class Finder {
 public:
     int max_depth;
     TT tt;
-    KillerMoves killer_moves = {{{0}}};
+    KillerMoves killer_moves;
 
     Finder(int max_depth = 0) :
         max_depth(max_depth) { }
@@ -75,7 +75,7 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
 
     std::thread deepening_thread([engine, &pos, &rt, &pool, &moves, last_move, &finders, &best_move, &produced_move, &stop]() {
         std::vector<std::shared_ptr<tp::Task>> tasks;
-        for (int depth = 1; !stop && pos.game_ply + depth < 2048; depth++) {
+        for (int depth = 1; !stop.load(std::memory_order_relaxed) && pos.game_ply + depth < 2048; depth++) {
             std::mutex mtx;
             Move current_best_move;
             int best_move_score = INT_MIN;
@@ -111,7 +111,7 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                     }
                     pos.undo<Us>(*move);
 
-                    if (!stop) {
+                    if (!stop.load(std::memory_order_relaxed)) {
                         mtx.lock();
                         if (score > best_move_score) {
                             current_best_move = *move;
@@ -129,7 +129,7 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                 }
             }
 
-            if (!stop) {
+            if (!stop.load(std::memory_order_relaxed)) {
                 best_move = current_best_move;
                 unsigned long long nodes = last_move - moves;
                 for (const auto& finder : finders) {
@@ -160,14 +160,14 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                 std::vector<std::string> args = {"depth", std::to_string(depth), "score", "cp", std::to_string(best_move_score), "nodes", std::to_string(nodes), "pv"};
                 args.insert(args.end(), pv.begin(), pv.end());
                 engine->send_message("info", args);
-                produced_move = true;
+                produced_move.store(true, std::memory_order_relaxed);
             }
         }
     });
 
     std::this_thread::sleep_for(search_time);
-    while (!produced_move) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
-    stop = true;
+    while (!produced_move.load(std::memory_order_relaxed)) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+    stop.store(true, std::memory_order_relaxed);
     deepening_thread.join();
 
     engine->move(best_move);

@@ -7,7 +7,7 @@
 
 template <Color Us>
 int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop) {
-    if (stop) {
+    if (stop.load(std::memory_order_relaxed)) {
         return 0;
     }
 
@@ -62,16 +62,16 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
         } else {
             sort_scores[move->from()][move->to()] += move_evaluations[move->from()][move->to()];
 
+            // Static exchange evaluation
+            if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
+                sort_scores[move->from()][move->to()] += see<Us>(pos, *move);
+            }
+
             if (move->is_castling()) {
                 sort_scores[move->from()][move->to()] += 5;
             }
             if (move->is_capture()) {
                 sort_scores[move->from()][move->to()] += mvv_lva(pos, *move);
-
-                // Static exchange evaluation
-                if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
-                    sort_scores[move->from()][move->to()] += see<Us>(pos, *move);
-                }
             }
             if (move->is_promotion()) {
                 sort_scores[move->from()][move->to()] += 50;
@@ -100,7 +100,7 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
             reduced_depth -= 2;
         }
 
-        // PVS
+    pvs:
         int score;
         pos.play<Us>(*move);
         if (hash_move.is_null() || *move == hash_move) {
@@ -113,11 +113,17 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
         }
         pos.undo<Us>(*move);
 
-        if (stop) {
+        if (stop.load(std::memory_order_relaxed)) {
             return 0;
         }
 
         if (score > alpha) {
+            // If a reduced move raises alpha, try again at normal depth
+            if (reduced_depth != depth) {
+                reduced_depth = depth;
+                goto pvs;
+            }
+
             best_move = *move;
             if (score >= beta) {
                 if (move->flags() == QUIET) {
@@ -142,7 +148,7 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
         best_move = moves[0];
     }
 
-    if (!stop) {
+    if (!stop.load(std::memory_order_relaxed)) {
         if (entry_it != tt.end()) {
             entry_it->second.score = alpha;
             entry_it->second.depth = depth;
@@ -159,7 +165,7 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
 
 template <Color Us>
 int Finder::quiesce(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop) {
-    if (stop) {
+    if (stop.load(std::memory_order_relaxed)) {
         return 0;
     }
 
@@ -235,7 +241,7 @@ int Finder::quiesce(Position& pos, int alpha, int beta, int depth, const std::at
         int score = -quiesce<~Us>(pos, -beta, -alpha, depth - 1, stop);
         pos.undo<Us>(*move);
 
-        if (stop) {
+        if (stop.load(std::memory_order_relaxed)) {
             return 0;
         }
 
