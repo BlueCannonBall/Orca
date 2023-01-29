@@ -21,6 +21,8 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
             return;
         }
 
+        stop.store(false, std::memory_order_relaxed);
+
         Color us = search.pos.turn();
 
         Move moves[218];
@@ -32,9 +34,6 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
 
         std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
         std::vector<Finder> finders(last_move - moves, Finder(start_time, search, stop));
-        for (size_t i = 0; i < finders.size(); i++) {
-            DYN_COLOR_CALL(finders[i].search.pos.play, us, moves[i]);
-        }
 
         const auto is_stopping = [start_time, &search, &stop]() {
             return std::chrono::steady_clock::now() - start_time > search.time || stop.load(std::memory_order_relaxed);
@@ -46,13 +45,14 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
 
         std::vector<std::shared_ptr<tp::Task>> tasks;
         for (int depth = 1; !is_stopping() && search.pos.game_ply + depth < 2048; depth++) {
-            for (Move* move = moves; move != last_move; move++) {
-                Move current_move = *move;
-                tasks.push_back(pool.schedule([us, depth, current_move, &mtx, &best_move, &best_move_score](void* data) {
+            for (Move* move_ptr = moves; move_ptr != last_move; move_ptr++) {
+                Move move = *move_ptr;
+                tasks.push_back(pool.schedule([us, depth, move, &mtx, &best_move, &best_move_score](void* data) {
                     Finder* finder = (Finder*) data;
 
                     int score;
                     RT::const_iterator entry_it;
+                    DYN_COLOR_CALL(finder->search.pos.play, us, move);
                     if ((entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && entry_it->second + 1 == 3) {
                         score = 0;
                     } else {
@@ -75,17 +75,18 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                             score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, -piece_values[KING] * 2, piece_values[KING] * 2, depth - 1);
                         }
                     }
+                    DYN_COLOR_CALL(finder->search.pos.undo, us, move);
 
                     if (!finder->is_stopping()) {
                         mtx.lock();
                         if (score > best_move_score) {
-                            best_move = current_move;
+                            best_move = move;
                             best_move_score = score;
                         }
                         mtx.unlock();
                     }
                 },
-                    &finders[move - moves]));
+                    &finders[move_ptr - moves]));
             }
 
             for (const auto& task : tasks) {
@@ -136,7 +137,6 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
         }
 
         uci::bestmove(best_move);
-        stop.store(false, std::memory_order_relaxed);
     }
 }
 
@@ -157,6 +157,20 @@ int main() {
         auto message = uci::poll();
 
         str_switch(message.command) {
+            str_case("uci") :
+            {
+                uci::send_message("id", {"name", "Orca"});
+                uci::send_message("id", {"author", "BlueCannonBall"});
+                uci::send_message("uciok");
+                break;
+            }
+
+            str_case("isready") :
+            {
+                uci::send_message("readyok");
+                break;
+            }
+
             str_case("position") :
             {
                 rt.clear();
@@ -212,56 +226,55 @@ int main() {
             str_case("go") :
             {
                 std::chrono::milliseconds search_time = std::chrono::seconds(10);
-                {
-                    std::chrono::milliseconds movetime = std::chrono::milliseconds(-1);
-                    std::chrono::milliseconds wtime = std::chrono::milliseconds(-1);
-                    std::chrono::milliseconds btime = std::chrono::milliseconds(-1);
-                    std::chrono::milliseconds winc = std::chrono::milliseconds(0);
-                    std::chrono::milliseconds binc = std::chrono::milliseconds(0);
-                    for (auto it = message.args.begin(); it != message.args.end(); it++) {
-                        if (*it == "movetime") {
-                            movetime = std::chrono::milliseconds(stoi(*++it));
-                        } else if (*it == "wtime") {
-                            wtime = std::chrono::milliseconds(stoi(*++it));
-                        } else if (*it == "btime") {
-                            btime = std::chrono::milliseconds(stoi(*++it));
-                        } else if (*it == "winc") {
-                            winc = std::chrono::milliseconds(stoi(*++it));
-                        } else if (*it == "binc") {
-                            binc = std::chrono::milliseconds(stoi(*++it));
-                        }
+
+                std::chrono::milliseconds movetime = std::chrono::milliseconds(-1);
+                std::chrono::milliseconds wtime = std::chrono::milliseconds(-1);
+                std::chrono::milliseconds btime = std::chrono::milliseconds(-1);
+                std::chrono::milliseconds winc = std::chrono::milliseconds(0);
+                std::chrono::milliseconds binc = std::chrono::milliseconds(0);
+                for (auto it = message.args.begin(); it != message.args.end(); it++) {
+                    if (*it == "movetime") {
+                        movetime = std::chrono::milliseconds(stoi(*++it));
+                    } else if (*it == "wtime") {
+                        wtime = std::chrono::milliseconds(stoi(*++it));
+                    } else if (*it == "btime") {
+                        btime = std::chrono::milliseconds(stoi(*++it));
+                    } else if (*it == "winc") {
+                        winc = std::chrono::milliseconds(stoi(*++it));
+                    } else if (*it == "binc") {
+                        binc = std::chrono::milliseconds(stoi(*++it));
+                    }
+                }
+
+                int moves_left;
+                if ((float) pos.game_ply / 2.f < 60.f) {
+                    moves_left = std::round(((-2.f / 3.f) * ((float) pos.game_ply / 2.f)) + 50.f);
+                } else if ((float) pos.game_ply / 2.f >= 60.f) {
+                    moves_left = std::round((0.1f * ((float) pos.game_ply / 2.f - 60.f)) + 10.f);
+                }
+
+                if (pos.turn() == WHITE) {
+                    if (movetime != std::chrono::milliseconds(-1)) {
+                        search_time = movetime;
+                    } else if (wtime != std::chrono::milliseconds(-1)) {
+                        search_time = std::chrono::milliseconds(std::min(wtime.count() / moves_left, 30000l));
                     }
 
-                    int moves_left;
-                    if ((float) pos.game_ply / 2.f < 60.f) {
-                        moves_left = std::round(((-2.f / 3.f) * ((float) pos.game_ply / 2.f)) + 50.f);
-                    } else if ((float) pos.game_ply / 2.f >= 60.f) {
-                        moves_left = std::round((0.1f * ((float) pos.game_ply / 2.f - 60.f)) + 10.f);
+                    if (search_time - std::chrono::milliseconds(500) < winc) {
+                        search_time = winc - std::chrono::milliseconds(500);
+                    }
+                } else if (pos.turn() == BLACK) {
+                    if (movetime != std::chrono::milliseconds(-1)) {
+                        search_time = movetime;
+                    } else if (btime != std::chrono::milliseconds(-1)) {
+                        search_time = std::chrono::milliseconds(std::min(btime.count() / moves_left, 30000l));
                     }
 
-                    if (pos.turn() == WHITE) {
-                        if (movetime != std::chrono::milliseconds(-1)) {
-                            search_time = movetime;
-                        } else if (wtime != std::chrono::milliseconds(-1)) {
-                            search_time = std::chrono::milliseconds(std::min(wtime.count() / moves_left, 30000l));
-                        }
-
-                        if (search_time - std::chrono::milliseconds(500) < winc) {
-                            search_time = winc - std::chrono::milliseconds(500);
-                        }
-                    } else if (pos.turn() == BLACK) {
-                        if (movetime != std::chrono::milliseconds(-1)) {
-                            search_time = movetime;
-                        } else if (btime != std::chrono::milliseconds(-1)) {
-                            search_time = std::chrono::milliseconds(std::min(btime.count() / moves_left, 30000l));
-                        }
-
-                        if (search_time - std::chrono::milliseconds(500) < binc) {
-                            search_time = binc - std::chrono::milliseconds(500);
-                        }
-                    } else {
-                        throw std::logic_error("Invalid side to move");
+                    if (search_time - std::chrono::milliseconds(500) < binc) {
+                        search_time = binc - std::chrono::milliseconds(500);
                     }
+                } else {
+                    throw std::logic_error("Invalid side to move");
                 }
 
                 channel.push(Search {
