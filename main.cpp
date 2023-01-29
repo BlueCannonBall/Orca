@@ -43,7 +43,7 @@ protected:
                 if (args[0] == "startpos") {
                     pos = Position(DEFAULT_FEN);
                     rt[pos.get_hash()] = 1;
-                    if (args.size() > 1) {
+                    if (args.size() > 2) {
                         for (size_t i = 2; i < args.size(); i++) {
                             if (((i - 2) % 2) == 0) {
                                 pos.play<WHITE>(uci::parse_move<WHITE>(pos, args[i]));
@@ -69,7 +69,7 @@ protected:
                     }
                     pos = Position(fen);
                     rt[pos.get_hash()] = 1;
-                    if (args.size() > 7) {
+                    if (args.size() > 8) {
                         for (size_t i = 8; i < args.size(); i++) {
                             if (((i - 8) % 2) == 0) {
                                 pos.play<WHITE>(uci::parse_move<WHITE>(pos, args[i]));

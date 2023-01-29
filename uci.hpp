@@ -86,6 +86,28 @@ namespace uci {
         return Move(from, to, flags);
     }
 
+    struct PollResult {
+        std::string command;
+        std::vector<std::string> args;
+    };
+
+    inline PollResult poll_inline() {
+        std::string line;
+        std::getline(std::cin, line);
+        boost::trim(line);
+
+        std::vector<std::string> line_split;
+        boost::split(line_split, line, isspace);
+
+        std::string command = line_split[0];
+        line_split.erase(line_split.begin());
+
+        return PollResult {
+            .command = command,
+            .args = line_split,
+        };
+    }
+
     class Engine {
     private:
         std::string name;
@@ -125,15 +147,8 @@ namespace uci {
         }
 
         void poll() {
-            std::string line;
-            std::getline(std::cin, line);
-
-            std::vector<std::string> line_split;
-            boost::split(line_split, line, isspace);
-
-            std::string command = line_split[0];
-            line_split.erase(line_split.begin());
-            this->_on_message(command, line_split);
+            const PollResult result = poll_inline();
+            this->_on_message(result.command, result.args);
         }
 
         void send_message(const std::string& command, const std::vector<std::string>& args) {

@@ -151,9 +151,15 @@ int evaluate(const Position& pos, bool debug) {
         while (orthogonal_sliders) {
             Square sq = pop_lsb(&orthogonal_sliders);
             File file = file_of(sq);
-            Bitboard pawns = (pos.bitboard_of(WHITE_PAWN) | pos.bitboard_of(BLACK_PAWN)) & MASK_FILE[file];
-            if (pawns) {
-                of += color == Us ? -10 : 10;
+
+            Bitboard white_pawns = pos.bitboard_of(WHITE_PAWN) & MASK_FILE[file];
+            Bitboard black_pawns = pos.bitboard_of(BLACK_PAWN) & MASK_FILE[file];
+
+            if (white_pawns) {
+                of += color == Us ? -5 : 5;
+            }
+            if (black_pawns) {
+                of += color == Us ? -5 : 5;
             }
         }
     }

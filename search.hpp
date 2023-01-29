@@ -7,6 +7,7 @@
 #include "uci.hpp"
 #include <atomic>
 #include <climits>
+#include <future>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -157,7 +158,14 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
                     }
                 }
 
-                std::vector<std::string> args = {"depth", std::to_string(depth), "score", "cp", std::to_string(best_move_score), "nodes", std::to_string(nodes), "pv"};
+                std::vector<std::string> args;
+                if (best_move_score >= piece_values[KING]) {
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((depth - (best_move_score - piece_values[KING])) / 2), "nodes", std::to_string(nodes), "pv"};
+                } else if (best_move_score <= -piece_values[KING]) {
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((-depth + std::abs(best_move_score + piece_values[KING])) / 2), "nodes", std::to_string(nodes), "pv"};
+                } else {
+                    args = {"depth", std::to_string(depth), "score", "cp", std::to_string(best_move_score), "nodes", std::to_string(nodes), "pv"};
+                }
                 args.insert(args.end(), pv.begin(), pv.end());
                 engine->send_message("info", args);
                 produced_move.store(true, std::memory_order_relaxed);
@@ -165,9 +173,27 @@ void go(uci::Engine* engine, Position& pos, DurationT search_time, const RT& rt,
         }
     });
 
-    std::this_thread::sleep_for(search_time);
-    while (!produced_move.load(std::memory_order_relaxed)) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
-    stop.store(true, std::memory_order_relaxed);
+    auto future = std::async(std::launch::async, uci::poll_inline);
+    auto start_time = std::chrono::steady_clock::now();
+
+    while (std::chrono::steady_clock::now() - start_time <= search_time || !produced_move.load(std::memory_order_relaxed)) {
+        if (future.wait_for(std::chrono::milliseconds(10)) == std::future_status::ready) {
+            auto result = future.get();
+            if (result.command == "stop") {
+                if (produced_move.load(std::memory_order_relaxed)) {
+                    stop.store(true, std::memory_order_relaxed);
+                    break;
+                } else {
+                    search_time = DurationT::zero();
+                }
+            }
+            future = std::async(std::launch::async, uci::poll_inline);
+        }
+    }
+
+    if (!stop.load(std::memory_order_relaxed)) {
+        stop.store(true, std::memory_order_relaxed);
+    }
     deepening_thread.join();
 
     engine->move(best_move);
