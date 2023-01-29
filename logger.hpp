@@ -19,10 +19,10 @@
 #endif
 
 enum class LogLevel : unsigned int {
-    Error = 1,
-    Warning = 2,
-    Info = 3,
-    Debug = 4
+    Error = 0b1,
+    Warning = 0b10,
+    Info = 0b100,
+    Debug = 0b1000,
 };
 
 inline LogLevel operator|(LogLevel lhs, LogLevel rhs) {
@@ -92,25 +92,11 @@ private:
         char timef[TIMEBUF_SIZE];
         strftime(timef, TIMEBUF_SIZE, "%c", timeinfo);
 
-        std::string original_logs = "";
         std::unique_lock<std::mutex> lock(this->mtx);
-        {
-            std::ifstream logfile(this->logfile_name);
-            if (logfile.is_open()) {
-                logfile.seekg(0, std::ios::end);
-                size_t size = logfile.tellg();
-                logfile.seekg(0);
-                original_logs.resize(size);
-                logfile.read(&original_logs[0], size);
-                logfile.close();
-            }
-        }
 
-        std::ofstream logfile(this->logfile_name);
+        std::ofstream logfile(this->logfile_name, std::ios::app);
         if (logfile.is_open()) {
             logfile << "[" << timef << "] " << message << std::endl;
-            logfile << original_logs;
-            logfile.flush();
             logfile.close();
         } else {
             throw std::runtime_error(strerror(errno));

@@ -91,10 +91,12 @@ namespace uci {
         std::vector<std::string> args;
     };
 
-    inline PollResult poll_inline() {
+    inline PollResult poll() {
         std::string line;
         std::getline(std::cin, line);
         boost::trim(line);
+
+        logger.info("Got UCI message: " + line);
 
         std::vector<std::string> line_split;
         boost::split(line_split, line, isspace);
@@ -108,73 +110,27 @@ namespace uci {
         };
     }
 
-    class Engine {
-    private:
-        std::string name;
-        std::string author;
-
-        void _on_message(const std::string& command, const std::vector<std::string>& args) {
-            str_switch(command) {
-                str_case("uci") :
-                {
-                    std::cout << "id name " << name << std::endl;
-                    std::cout << "id author " << author << std::endl;
-                    this->declare_options();
-                    std::cout << "uciok" << std::endl;
-                    break;
-                }
-
-                str_case("isready") :
-                {
-                    std::cout << "readyok\n";
-                    break;
-                }
-
-                default: {
-                    on_message(command, args);
-                    break;
-                }
-            }
-        }
-
-    public:
-        Engine(
-            const std::string& name, const std::string& author) :
-            name(name),
-            author(author) {
-            std::cout.setf(std::ios::unitbuf);
-            std::cin.setf(std::ios::unitbuf);
-        }
-
-        void poll() {
-            const PollResult result = poll_inline();
-            this->_on_message(result.command, result.args);
-        }
-
-        void send_message(const std::string& command, const std::vector<std::string>& args) {
-            std::cout << command << ' ';
+    inline void send_message(const std::string& command, const std::vector<std::string>& args = {}) {
+        std::ostringstream ss;
+        ss << command;
+        if (!args.empty()) {
+            ss << ' ';
             for (size_t i = 0; i < args.size(); i++) {
-                std::cout << args[i];
-                if (i < args.size() - 1) {
-                    std::cout << ' ';
-                } else {
-                    std::cout << std::endl;
+                ss << args[i];
+                if (i != args.size() - 1) {
+                    ss << ' ';
                 }
             }
         }
+        logger.info("Sent UCI command: " + ss.str());
+        std::cout << ss.str() << std::endl;
+    }
 
-        void move(Move best_move, Move ponder_move = Move()) {
-            if (ponder_move.is_null()) {
-                this->send_message("bestmove", {format_move(best_move)});
-            } else {
-                this->send_message("bestmove", {format_move(best_move), "ponder", format_move(ponder_move)});
-            }
+    inline void bestmove(Move best_move, Move ponder_move = Move()) {
+        if (ponder_move.is_null()) {
+            send_message("bestmove", {format_move(best_move)});
+        } else {
+            send_message("bestmove", {format_move(best_move), "ponder", format_move(ponder_move)});
         }
-
-        virtual ~Engine() { }
-
-    protected:
-        virtual void declare_options() { }
-        virtual void on_message(const std::string& command, const std::vector<std::string>& args) = 0;
-    };
+    }
 } // namespace uci

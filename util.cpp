@@ -1,5 +1,7 @@
 #include "util.hpp"
 
+Logger logger("/tmp/orca.log");
+
 GameProgress get_progress(int mv1, int mv2) {
     return (mv1 <= 1300 && mv2 <= 1300) ? ENDGAME : MIDGAME;
 }

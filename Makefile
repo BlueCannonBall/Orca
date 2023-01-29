@@ -1,12 +1,13 @@
 CXX = g++-10
 CXXFLAGS = -Wall -std=c++20 -Ofast -flto -march=native -mtune=native -pthread
+LIBS = -lboost_fiber
 HEADERS = $(shell find . -name "*.h" -o -name "*.hpp")
 OBJDIR = obj
 OBJS = $(OBJDIR)/main.o $(OBJDIR)/position.o $(OBJDIR)/tables.o $(OBJDIR)/types.o $(OBJDIR)/util.o $(OBJDIR)/evaluation.o $(OBJDIR)/search.o
 TARGET = orca
 
 $(TARGET): $(OBJS)
-	$(CXX) $^ $(CXXFLAGS) -o $@
+	$(CXX) $^ $(CXXFLAGS) $(LIBS) -o $@
 
 $(OBJDIR)/main.o: main.cpp $(HEADERS)
 	mkdir -p $(OBJDIR)

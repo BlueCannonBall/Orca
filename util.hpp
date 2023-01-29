@@ -1,5 +1,6 @@
 #pragma once
 
+#include "logger.hpp"
 #include "surge/src/position.h"
 #include "surge/src/types.h"
 
@@ -7,6 +8,8 @@
 #define DYN_COLOR_CALL(function, color, ...) ({                                   \
     color == WHITE ? function<WHITE>(__VA_ARGS__) : function<BLACK>(__VA_ARGS__); \
 })
+
+extern Logger logger;
 
 enum GameProgress {
     MIDGAME,

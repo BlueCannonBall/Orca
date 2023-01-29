@@ -2,18 +2,17 @@
 #include "surge/src/types.h"
 #include <algorithm>
 #include <cassert>
-#include <climits>
 #include <cmath>
 
 template <Color Us>
-int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop) {
-    if (stop.load(std::memory_order_relaxed)) {
+int Finder::alpha_beta(int alpha, int beta, int depth) {
+    if (is_stopping()) {
         return 0;
     }
 
     Move hash_move;
     TT::iterator entry_it;
-    if ((entry_it = tt.find(pos.get_hash())) != tt.end()) {
+    if ((entry_it = tt.find(search.pos.get_hash())) != tt.end()) {
         if (entry_it->second.depth >= depth) {
             if (entry_it->second.flag == EXACT) {
                 return entry_it->second.score;
@@ -31,29 +30,29 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
     }
 
     if (depth == 0) {
-        return quiesce<Us>(pos, alpha, beta, depth - 1, stop);
+        return quiesce<Us>(alpha, beta, depth - 1);
     }
 
-    bool in_check = pos.in_check<Us>();
+    bool in_check = search.pos.in_check<Us>();
     bool is_pv = alpha != beta - 1;
 
     // Reverse futility pruning
     if (!is_pv && !in_check && depth <= 8) {
-        int evaluation = evaluate<Us>(pos);
+        int evaluation = evaluate<Us>(search.pos);
         if (evaluation - (120 * depth) >= beta) {
             return evaluation;
         }
     }
 
     Move moves[218];
-    Move* last_move = pos.generate_legals<Us>(moves);
+    Move* last_move = search.pos.generate_legals<Us>(moves);
 
     int move_evaluations[NSQUARES][NSQUARES] = {{0}};
     int sort_scores[NSQUARES][NSQUARES] = {{0}};
     for (const Move* move = moves; move != last_move; move++) {
-        pos.play<Us>(*move);
-        move_evaluations[move->from()][move->to()] = evaluate<Us>(pos);
-        pos.undo<Us>(*move);
+        search.pos.play<Us>(*move);
+        move_evaluations[move->from()][move->to()] = evaluate<Us>(search.pos);
+        search.pos.undo<Us>(*move);
 
         if (*move == hash_move) {
             sort_scores[move->from()][move->to()] = piece_values[KING] * 2;
@@ -70,7 +69,7 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
 
                 // Static exchange evaluation
                 if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
-                    sort_scores[move->from()][move->to()] += see<Us>(pos, *move);
+                    sort_scores[move->from()][move->to()] += see<Us>(search.pos, *move);
                 }
             }
             if (move->is_promotion()) {
@@ -102,18 +101,18 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
 
         // Principle variation search
         int score;
-        pos.play<Us>(*move);
+        search.pos.play<Us>(*move);
         if (hash_move.is_null() || *move == hash_move) {
-            score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
+            score = -alpha_beta<~Us>(-beta, -alpha, reduced_depth - 1);
         } else {
-            score = -alpha_beta<~Us>(pos, -alpha - 1, -alpha, reduced_depth - 1, stop);
+            score = -alpha_beta<~Us>(-alpha - 1, -alpha, reduced_depth - 1);
             if (score > alpha) {
-                score = -alpha_beta<~Us>(pos, -beta, -alpha, reduced_depth - 1, stop);
+                score = -alpha_beta<~Us>(-beta, -alpha, reduced_depth - 1);
             }
         }
-        pos.undo<Us>(*move);
+        search.pos.undo<Us>(*move);
 
-        if (stop.load(std::memory_order_relaxed)) {
+        if (is_stopping()) {
             return 0;
         }
 
@@ -142,7 +141,7 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
         best_move = moves[0];
     }
 
-    if (!stop.load(std::memory_order_relaxed)) {
+    if (!is_stopping()) {
         if (entry_it != tt.end()) {
             entry_it->second.score = alpha;
             entry_it->second.depth = depth;
@@ -150,7 +149,7 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
             entry_it->second.flag = flag;
         } else {
             TTEntry entry(alpha, depth, best_move, flag);
-            tt[pos.get_hash()] = entry;
+            tt[search.pos.get_hash()] = entry;
         }
     }
 
@@ -158,12 +157,12 @@ int Finder::alpha_beta(Position& pos, int alpha, int beta, int depth, const std:
 }
 
 template <Color Us>
-int Finder::quiesce(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop) {
-    if (stop.load(std::memory_order_relaxed)) {
+int Finder::quiesce(int alpha, int beta, int depth) {
+    if (is_stopping()) {
         return 0;
     }
 
-    int evaluation = evaluate<Us>(pos);
+    int evaluation = evaluate<Us>(search.pos);
     if (evaluation >= beta) {
         return beta;
     } else if (alpha < evaluation) {
@@ -172,14 +171,14 @@ int Finder::quiesce(Position& pos, int alpha, int beta, int depth, const std::at
 
     Move hash_move;
     TT::const_iterator entry_it;
-    if ((entry_it = tt.find(pos.get_hash())) != tt.end()) {
+    if ((entry_it = tt.find(search.pos.get_hash())) != tt.end()) {
         hash_move = entry_it->second.best_move;
     }
 
-    bool in_check = pos.in_check<Us>();
+    bool in_check = search.pos.in_check<Us>();
 
     Move moves[218];
-    Move* last_move = pos.generate_legals<Us>(moves);
+    Move* last_move = search.pos.generate_legals<Us>(moves);
 
     if (moves == last_move) {
         if (in_check) {
@@ -195,11 +194,11 @@ int Finder::quiesce(Position& pos, int alpha, int beta, int depth, const std::at
             if (*move == hash_move) {
                 sort_scores[move->from()][move->to()] = piece_values[KING] * 2;
             } else {
-                sort_scores[move->from()][move->to()] += mvv_lva(pos, *move);
+                sort_scores[move->from()][move->to()] += mvv_lva(search.pos, *move);
 
                 // Static exchange evaluation
                 if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
-                    sort_scores[move->from()][move->to()] += see<Us>(pos, *move);
+                    sort_scores[move->from()][move->to()] += see<Us>(search.pos, *move);
                 }
 
                 if (move->is_promotion()) {
@@ -220,15 +219,15 @@ int Finder::quiesce(Position& pos, int alpha, int beta, int depth, const std::at
         }
 
         // Delta pruning
-        if (piece_values[type_of(pos.at(move->to()))] + 200 <= alpha) {
+        if (piece_values[type_of(search.pos.at(move->to()))] + 200 <= alpha) {
             continue;
         }
 
-        pos.play<Us>(*move);
-        int score = -quiesce<~Us>(pos, -beta, -alpha, depth - 1, stop);
-        pos.undo<Us>(*move);
+        search.pos.play<Us>(*move);
+        int score = -quiesce<~Us>(-beta, -alpha, depth - 1);
+        search.pos.undo<Us>(*move);
 
-        if (stop.load(std::memory_order_relaxed)) {
+        if (is_stopping()) {
             return 0;
         }
 
@@ -262,11 +261,11 @@ bool Finder::is_killer_move(Move move, int depth) const {
     return ret;
 }
 
-template int Finder::alpha_beta<WHITE>(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop);
-template int Finder::alpha_beta<BLACK>(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop);
+template int Finder::alpha_beta<WHITE>(int alpha, int beta, int depth);
+template int Finder::alpha_beta<BLACK>(int alpha, int beta, int depth);
 
-template int Finder::quiesce<WHITE>(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop);
-template int Finder::quiesce<BLACK>(Position& pos, int alpha, int beta, int depth, const std::atomic<bool>& stop);
+template int Finder::quiesce<WHITE>(int alpha, int beta, int depth);
+template int Finder::quiesce<BLACK>(int alpha, int beta, int depth);
 
 template void Finder::add_killer_move<WHITE>(Move move, int depth);
 template bool Finder::is_killer_move<WHITE>(Move move, int depth) const;
