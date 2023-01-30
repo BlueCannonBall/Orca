@@ -96,7 +96,7 @@ namespace uci {
         std::getline(std::cin, line);
         boost::trim(line);
 
-        logger.info("Got UCI message: " + line);
+        logger.debug("Got UCI message: " + line);
 
         std::vector<std::string> line_split;
         boost::split(line_split, line, isspace);
@@ -122,7 +122,7 @@ namespace uci {
                 }
             }
         }
-        logger.info("Sent UCI command: " + ss.str());
+        logger.debug("Sent UCI command: " + ss.str());
         std::cout << ss.str() << std::endl;
     }
 

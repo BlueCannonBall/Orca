@@ -40,6 +40,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
         };
 
         Move best_move;
+        Move ponder_move;
 
         for (int depth = 1; !is_stopping() && search.pos.game_ply + depth < 2048; depth++) {
             std::mutex mtx;
@@ -121,6 +122,9 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                             break;
                         } else {
                             current_move = entry_it->second.best_move;
+                            if (pv.size() == 1) {
+                                ponder_move = current_move;
+                            }
                         }
                     } else {
                         break;
@@ -140,7 +144,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
             }
         }
 
-        uci::bestmove(best_move);
+        uci::bestmove(best_move, ponder_move);
     }
 }
 
