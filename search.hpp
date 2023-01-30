@@ -6,6 +6,7 @@
 #include "threadpool.hpp"
 #include "uci.hpp"
 #include <atomic>
+#include <chrono>
 #include <unordered_map>
 #include <vector>
 
@@ -45,6 +46,7 @@ class Finder {
 public:
     std::chrono::steady_clock::time_point start_time;
     Search search;
+    int starting_depth;
     const std::atomic<bool>& stop;
     TT tt;
     KillerMoves killer_moves;
@@ -61,7 +63,7 @@ public:
     int quiesce(int alpha, int beta, int depth);
 
     bool is_stopping() const {
-        return std::chrono::steady_clock::now() - start_time > search.time || stop.load(std::memory_order_relaxed);
+        return starting_depth > 1 && (std::chrono::steady_clock::now() - start_time > search.time || stop.load(std::memory_order_relaxed));
     }
 
 protected:

@@ -1,5 +1,5 @@
-CXX = g++-10
-CXXFLAGS = -Wall -std=c++20 -Ofast -flto -march=native -mtune=native -pthread
+CXX = g++
+CXXFLAGS = -Wall -std=c++14 -Ofast -flto -march=native -mtune=native -pthread
 LIBS = -lboost_fiber
 HEADERS = $(shell find . -name "*.h" -o -name "*.hpp")
 OBJDIR = obj

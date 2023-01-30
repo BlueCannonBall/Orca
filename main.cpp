@@ -8,6 +8,7 @@
 #include "util.hpp"
 #include <atomic>
 #include <boost/fiber/unbuffered_channel.hpp>
+#include <chrono>
 #include <cmath>
 #include <string>
 #include <thread>
@@ -29,19 +30,20 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
         Move* last_move = DYN_COLOR_CALL(search.pos.generate_legals, us, moves);
         if (last_move - moves == 1) {
             uci::bestmove(moves[0]);
-            break;
+            continue;
         }
 
         std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
         std::vector<Finder> finders(last_move - moves, Finder(start_time, search, stop));
 
-        const auto is_stopping = [start_time, &search, &stop]() {
-            return std::chrono::steady_clock::now() - start_time > search.time || stop.load(std::memory_order_relaxed);
+        const auto is_stopping = [start_time, &search, &stop](int depth) {
+            return depth > 1 && (std::chrono::steady_clock::now() - start_time > search.time || stop.load(std::memory_order_relaxed));
         };
 
         Move best_move;
+        Move ponder_move;
 
-        for (int depth = 1; !is_stopping() && search.pos.game_ply + depth < 2048; depth++) {
+        for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth < 2048; depth++) {
             std::mutex mtx;
             Move current_best_move;
             int current_best_move_score = INT_MIN;
@@ -52,6 +54,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                 Move move = *move_ptr;
                 tasks.push_back(pool.schedule([us, depth, move, &mtx, &current_best_move, &current_best_move_score](void* data) {
                     Finder* finder = (Finder*) data;
+                    finder->starting_depth = depth;
 
                     int score;
                     RT::const_iterator entry_it;
@@ -99,7 +102,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                 }
             }
 
-            if (!is_stopping()) {
+            if (!is_stopping(depth)) {
                 best_move = current_best_move;
                 unsigned long long nodes = last_move - moves;
                 for (const auto& finder : finders) {
@@ -111,6 +114,9 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                 std::vector<Move> pv = get_pv(search.pos, tt);
                 pv.insert(pv.begin(), best_move);
                 pv.resize(std::min((int) pv.size(), depth));
+                if (pv.size() > 1) {
+                    ponder_move = pv[1];
+                }
                 DYN_COLOR_CALL(search.pos.undo, us, best_move);
                 std::vector<std::string> pv_strings;
                 std::transform(pv.cbegin(), pv.cend(), std::back_inserter(pv_strings), uci::format_move);
@@ -119,7 +125,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                 if (current_best_move_score >= piece_values[KING]) {
                     args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::ceil((depth - (current_best_move_score - piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
                 } else if (current_best_move_score <= -piece_values[KING]) {
-                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::ceil((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
+                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::floor((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
                 } else {
                     args = std::vector<std::string> {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "pv"};
                 }
@@ -128,7 +134,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
             }
         }
 
-        uci::bestmove(best_move);
+        uci::bestmove(best_move, ponder_move);
     }
 }
 
@@ -217,13 +223,15 @@ int main() {
 
             str_case("go") :
             {
-                std::chrono::milliseconds search_time = std::chrono::seconds(10);
+                using namespace std::chrono_literals;
 
-                std::chrono::milliseconds movetime = std::chrono::milliseconds(-1);
-                std::chrono::milliseconds wtime = std::chrono::milliseconds(-1);
-                std::chrono::milliseconds btime = std::chrono::milliseconds(-1);
-                std::chrono::milliseconds winc = std::chrono::milliseconds(0);
-                std::chrono::milliseconds binc = std::chrono::milliseconds(0);
+                std::chrono::milliseconds search_time = 10s;
+
+                std::chrono::milliseconds movetime = 0ms;
+                std::chrono::milliseconds wtime = 0ms;
+                std::chrono::milliseconds btime = 0ms;
+                std::chrono::milliseconds winc = 0ms;
+                std::chrono::milliseconds binc = 0ms;
                 for (auto it = message.args.begin(); it != message.args.end(); it++) {
                     if (*it == "movetime") {
                         movetime = std::chrono::milliseconds(stoi(*++it));
@@ -246,24 +254,24 @@ int main() {
                 }
 
                 if (pos.turn() == WHITE) {
-                    if (movetime != std::chrono::milliseconds(-1)) {
+                    if (movetime != 0ms) {
                         search_time = movetime;
-                    } else if (wtime != std::chrono::milliseconds(-1)) {
-                        search_time = std::chrono::milliseconds(std::max(std::min(wtime.count() / moves_left, 30000l), 500l));
+                    } else if (wtime != 0ms) {
+                        search_time = std::min(wtime / moves_left, 30000ms);
                     }
 
-                    if (search_time - std::chrono::milliseconds(500) < winc) {
-                        search_time = winc - std::chrono::milliseconds(500);
+                    if (search_time - 500ms < winc) {
+                        search_time = winc - 500ms;
                     }
                 } else if (pos.turn() == BLACK) {
-                    if (movetime != std::chrono::milliseconds(-1)) {
+                    if (movetime != 0ms) {
                         search_time = movetime;
-                    } else if (btime != std::chrono::milliseconds(-1)) {
-                        search_time = std::chrono::milliseconds(std::max(std::min(btime.count() / moves_left, 30000l), 500l));
+                    } else if (btime != 0ms) {
+                        search_time = std::min(btime / moves_left, 30000ms);
                     }
 
-                    if (search_time - std::chrono::milliseconds(500) < binc) {
-                        search_time = binc - std::chrono::milliseconds(500);
+                    if (search_time - 500ms < binc) {
+                        search_time = binc - 500ms;
                     }
                 } else {
                     throw std::logic_error("Invalid side to move");
@@ -286,6 +294,7 @@ int main() {
 
             str_case("quit") :
             {
+                stop.store(true, std::memory_order_relaxed);
                 channel.push(Search {
                     .quit = true,
                 });
