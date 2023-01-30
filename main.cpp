@@ -265,7 +265,7 @@ int main() {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
                     } else if (wtime != std::chrono::milliseconds(-1)) {
-                        search_time = std::chrono::milliseconds(std::min(wtime.count() / moves_left, 30000l));
+                        search_time = std::chrono::milliseconds(std::max(std::min(wtime.count() / moves_left, 30000l), 500l));
                     }
 
                     if (search_time - std::chrono::milliseconds(500) < winc) {
@@ -275,7 +275,7 @@ int main() {
                     if (movetime != std::chrono::milliseconds(-1)) {
                         search_time = movetime;
                     } else if (btime != std::chrono::milliseconds(-1)) {
-                        search_time = std::chrono::milliseconds(std::min(btime.count() / moves_left, 30000l));
+                        search_time = std::chrono::milliseconds(std::max(std::min(btime.count() / moves_left, 30000l), 500l));
                     }
 
                     if (search_time - std::chrono::milliseconds(500) < binc) {
