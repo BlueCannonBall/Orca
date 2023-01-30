@@ -264,7 +264,7 @@ bool Finder::is_killer_move(Move move, int depth) const {
 std::vector<Move> get_pv(Position pos, const TT& tt) {
     std::vector<Move> ret;
 
-    for (Color side_to_move = pos.turn(); pos.game_ply < 2048; side_to_move = ~side_to_move) {
+    for (Color side_to_move = pos.turn(); pos.game_ply < NHISTORY; side_to_move = ~side_to_move) {
         TT::const_iterator entry_it;
         if ((entry_it = tt.find(pos.get_hash())) != tt.end()) {
             if (entry_it->second.best_move.is_null()) {

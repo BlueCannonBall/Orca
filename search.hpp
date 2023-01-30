@@ -32,7 +32,7 @@ public:
 };
 
 typedef std::unordered_map<uint64_t, TTEntry> TT;
-typedef Move KillerMoves[NCOLORS][2048][3];
+typedef Move KillerMoves[NCOLORS][NHISTORY][3];
 typedef std::unordered_map<uint64_t, unsigned short> RT;
 
 struct Search {

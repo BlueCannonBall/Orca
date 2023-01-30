@@ -43,7 +43,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
         Move best_move;
         Move ponder_move;
 
-        for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth < 2048; depth++) {
+        for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth < NHISTORY; depth++) {
             std::mutex mtx;
             Move current_best_move;
             int current_best_move_score = INT_MIN;
