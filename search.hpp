@@ -39,6 +39,7 @@ struct Search {
     Position pos;
     RT rt;
     std::chrono::milliseconds time;
+    int target_depth = -1;
     bool quit = false;
 };
 

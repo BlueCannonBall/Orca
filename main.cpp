@@ -42,8 +42,9 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
 
         Move best_move;
         Move ponder_move;
+        int max_game_ply = search.target_depth == -1 ? NHISTORY : (search.pos.game_ply + search.target_depth);
 
-        for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth < NHISTORY; depth++) {
+        for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply; depth++) {
             std::mutex mtx;
             Move current_best_move;
             int current_best_move_score = INT_MIN;
@@ -232,55 +233,89 @@ int main() {
                 std::chrono::milliseconds btime = 0ms;
                 std::chrono::milliseconds winc = 0ms;
                 std::chrono::milliseconds binc = 0ms;
+                bool infinite = false;
+                int depth = -1;
                 for (auto it = message.args.begin(); it != message.args.end(); it++) {
-                    if (*it == "movetime") {
-                        movetime = std::chrono::milliseconds(stoi(*++it));
-                    } else if (*it == "wtime") {
-                        wtime = std::chrono::milliseconds(stoi(*++it));
-                    } else if (*it == "btime") {
-                        btime = std::chrono::milliseconds(stoi(*++it));
-                    } else if (*it == "winc") {
-                        winc = std::chrono::milliseconds(stoi(*++it));
-                    } else if (*it == "binc") {
-                        binc = std::chrono::milliseconds(stoi(*++it));
+                    str_switch(*it) {
+                        str_case("movetime") :
+                        {
+                            movetime = std::chrono::milliseconds(stoi(*++it));
+                            break;
+                        }
+                        str_case("wtime") :
+                        {
+                            wtime = std::chrono::milliseconds(stoi(*++it));
+                            break;
+                        }
+                        str_case("btime") :
+                        {
+                            btime = std::chrono::milliseconds(stoi(*++it));
+                            break;
+                        }
+                        str_case("winc") :
+                        {
+                            winc = std::chrono::milliseconds(stoi(*++it));
+                            break;
+                        }
+                        str_case("binc") :
+                        {
+                            binc = std::chrono::milliseconds(stoi(*++it));
+                            break;
+                        }
+                        str_case("infinite") :
+                            str_case("ponder") :
+                        {
+                            infinite = true;
+                            break;
+                        }
+                        str_case("depth") :
+                        {
+                            depth = stoi(*++it);
+                            break;
+                        }
                     }
                 }
 
-                int moves_left;
-                if ((float) pos.game_ply / 2.f < 60.f) {
-                    moves_left = std::round(((-2.f / 3.f) * ((float) pos.game_ply / 2.f)) + 50.f);
-                } else if ((float) pos.game_ply / 2.f >= 60.f) {
-                    moves_left = std::round((0.1f * ((float) pos.game_ply / 2.f - 60.f)) + 10.f);
-                }
-
-                if (pos.turn() == WHITE) {
-                    if (movetime != 0ms) {
-                        search_time = movetime;
-                    } else if (wtime != 0ms) {
-                        search_time = std::min(wtime / moves_left, 30000ms);
-                    }
-
-                    if (search_time - 500ms < winc) {
-                        search_time = winc - 500ms;
-                    }
-                } else if (pos.turn() == BLACK) {
-                    if (movetime != 0ms) {
-                        search_time = movetime;
-                    } else if (btime != 0ms) {
-                        search_time = std::min(btime / moves_left, 30000ms);
-                    }
-
-                    if (search_time - 500ms < binc) {
-                        search_time = binc - 500ms;
-                    }
+                if (infinite || depth != -1) {
+                    search_time = 10h;
                 } else {
-                    throw std::logic_error("Invalid side to move");
+                    int moves_left;
+                    if ((float) pos.game_ply / 2.f < 60.f) {
+                        moves_left = std::round(((-2.f / 3.f) * ((float) pos.game_ply / 2.f)) + 50.f);
+                    } else if ((float) pos.game_ply / 2.f >= 60.f) {
+                        moves_left = std::round((0.1f * ((float) pos.game_ply / 2.f - 60.f)) + 10.f);
+                    }
+
+                    if (pos.turn() == WHITE) {
+                        if (movetime != 0ms) {
+                            search_time = movetime;
+                        } else if (wtime != 0ms) {
+                            search_time = std::min(wtime / moves_left, 30000ms);
+                        }
+
+                        if (search_time - 500ms < winc) {
+                            search_time = winc - 500ms;
+                        }
+                    } else if (pos.turn() == BLACK) {
+                        if (movetime != 0ms) {
+                            search_time = movetime;
+                        } else if (btime != 0ms) {
+                            search_time = std::min(btime / moves_left, 30000ms);
+                        }
+
+                        if (search_time - 500ms < binc) {
+                            search_time = binc - 500ms;
+                        }
+                    } else {
+                        throw std::logic_error("Invalid side to move");
+                    }
                 }
 
                 channel.push(Search {
                     .pos = pos,
                     .rt = rt,
                     .time = search_time,
+                    .target_depth = depth,
                 });
 
                 break;
