@@ -39,15 +39,18 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
             return std::chrono::steady_clock::now() - start_time > search.time || stop.load(std::memory_order_relaxed);
         };
 
-        std::mutex mtx;
         Move best_move;
-        int best_move_score = INT_MIN;
 
-        std::vector<std::shared_ptr<tp::Task>> tasks;
         for (int depth = 1; !is_stopping() && search.pos.game_ply + depth < 2048; depth++) {
+            std::mutex mtx;
+            Move current_best_move;
+            int current_best_move_score = INT_MIN;
+
+            std::vector<std::shared_ptr<tp::Task>> tasks;
+
             for (Move* move_ptr = moves; move_ptr != last_move; move_ptr++) {
                 Move move = *move_ptr;
-                tasks.push_back(pool.schedule([us, depth, move, &mtx, &best_move, &best_move_score](void* data) {
+                tasks.push_back(pool.schedule([us, depth, move, &mtx, &current_best_move, &current_best_move_score](void* data) {
                     Finder* finder = (Finder*) data;
 
                     int score;
@@ -79,9 +82,9 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
 
                     if (!finder->is_stopping()) {
                         mtx.lock();
-                        if (score > best_move_score) {
-                            best_move = move;
-                            best_move_score = score;
+                        if (score > current_best_move_score) {
+                            current_best_move = move;
+                            current_best_move_score = score;
                         }
                         mtx.unlock();
                     }
@@ -97,6 +100,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
             }
 
             if (!is_stopping()) {
+                best_move = current_best_move;
                 unsigned long long nodes = last_move - moves;
                 for (const auto& finder : finders) {
                     nodes += finder.tt.size();
@@ -124,12 +128,12 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                 }
 
                 std::vector<std::string> args;
-                if (best_move_score >= piece_values[KING]) {
-                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string(std::ceil((depth - (best_move_score - piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
-                } else if (best_move_score <= -piece_values[KING]) {
-                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string(std::ceil((-depth + std::abs(best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
+                if (current_best_move_score >= piece_values[KING]) {
+                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::ceil((depth - (current_best_move_score - piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
+                } else if (current_best_move_score <= -piece_values[KING]) {
+                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::ceil((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
                 } else {
-                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "cp", std::to_string(best_move_score), "nodes", std::to_string(nodes), "pv"};
+                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "pv"};
                 }
                 args.insert(args.end(), pv.begin(), pv.end());
                 uci::send_message("info", args);
