@@ -71,3 +71,5 @@ protected:
     template <Color Us>
     bool is_killer_move(Move move, int depth) const;
 };
+
+std::vector<Move> get_pv(Position pos, const TT& tt);

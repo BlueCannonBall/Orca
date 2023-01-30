@@ -261,6 +261,26 @@ bool Finder::is_killer_move(Move move, int depth) const {
     return ret;
 }
 
+std::vector<Move> get_pv(Position pos, const TT& tt) {
+    std::vector<Move> ret;
+
+    for (Color side_to_move = pos.turn(); pos.game_ply < 2048; side_to_move = ~side_to_move) {
+        TT::const_iterator entry_it;
+        if ((entry_it = tt.find(pos.get_hash())) != tt.end()) {
+            if (entry_it->second.best_move.is_null()) {
+                break;
+            } else {
+                ret.push_back(entry_it->second.best_move);
+                DYN_COLOR_CALL(pos.play, side_to_move, entry_it->second.best_move);
+            }
+        } else {
+            break;
+        }
+    }
+
+    return ret;
+}
+
 template int Finder::alpha_beta<WHITE>(int alpha, int beta, int depth);
 template int Finder::alpha_beta<BLACK>(int alpha, int beta, int depth);
 

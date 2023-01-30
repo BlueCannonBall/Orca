@@ -40,7 +40,6 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
         };
 
         Move best_move;
-        Move ponder_move;
 
         for (int depth = 1; !is_stopping() && search.pos.game_ply + depth < 2048; depth++) {
             std::mutex mtx;
@@ -107,29 +106,11 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                     nodes += finder.tt.size();
                 }
 
-                std::vector<std::string> pv;
                 const TT& tt = finders[std::find(moves, last_move, best_move) - moves].tt;
-
-                Move current_move = best_move;
-                Position current_pos = search.pos;
-                for (Color side_to_move = us; current_pos.game_ply < search.pos.game_ply + depth && current_pos.game_ply < 2048; side_to_move = ~side_to_move) {
-                    pv.push_back(uci::format_move(current_move));
-
-                    DYN_COLOR_CALL(current_pos.play, side_to_move, current_move);
-                    TT::const_iterator entry_it;
-                    if ((entry_it = tt.find(current_pos.get_hash())) != tt.end()) {
-                        if (entry_it->second.best_move.is_null()) {
-                            break;
-                        } else {
-                            current_move = entry_it->second.best_move;
-                            if (pv.size() == 1) {
-                                ponder_move = current_move;
-                            }
-                        }
-                    } else {
-                        break;
-                    }
-                }
+                std::vector<Move> pv = get_pv(search.pos, tt);
+                std::vector<std::string> pv_strings;
+                std::transform(pv.begin(), pv.end(), pv_strings.begin(), uci::format_move);
+                pv_strings.resize(depth);
 
                 std::vector<std::string> args;
                 if (current_best_move_score >= piece_values[KING]) {
@@ -139,12 +120,12 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                 } else {
                     args = std::vector<std::string> {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "pv"};
                 }
-                args.insert(args.end(), pv.begin(), pv.end());
+                args.insert(args.end(), pv_strings.begin(), pv_strings.end());
                 uci::send_message("info", args);
             }
         }
 
-        uci::bestmove(best_move, ponder_move);
+        uci::bestmove(best_move);
     }
 }
 
