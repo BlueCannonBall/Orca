@@ -36,6 +36,11 @@ int evaluate(const Position& pos, bool debug) {
     np -= pop_count(pos.bitboard_of(Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
     np += pop_count(pos.bitboard_of(~Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
 
+    // Rook placement
+    int rp = 0;
+    rp += pop_count(pos.bitboard_of(Us, ROOK) & MASK_RANK[Us == WHITE ? RANK7 : RANK2]) * 10;
+    rp -= pop_count(pos.bitboard_of(~Us, ROOK) & MASK_RANK[~Us == WHITE ? RANK7 : RANK2]) * 10;
+
     // King placement
     /*
     function distance(x1, y1, x2, y2) {
@@ -147,19 +152,21 @@ int evaluate(const Position& pos, bool debug) {
     // Open files
     int of = 0;
     for (Color color = WHITE; color < NCOLORS; ++color) {
-        Bitboard orthogonal_sliders = DYN_COLOR_CALL(pos.orthogonal_sliders, color);
-        while (orthogonal_sliders) {
-            Square sq = pop_lsb(&orthogonal_sliders);
+        Bitboard rooks = pos.bitboard_of(color, ROOK);
+        while (rooks) {
+            Square sq = pop_lsb(&rooks);
             File file = file_of(sq);
 
-            Bitboard white_pawns = pos.bitboard_of(WHITE_PAWN) & MASK_FILE[file];
-            Bitboard black_pawns = pos.bitboard_of(BLACK_PAWN) & MASK_FILE[file];
+            Bitboard pawns[NCOLORS] = {
+                pos.bitboard_of(WHITE_PAWN) & MASK_FILE[file],
+                pos.bitboard_of(BLACK_PAWN) & MASK_FILE[file],
+            };
 
-            if (white_pawns) {
-                of += color == Us ? -5 : 5;
-            }
-            if (black_pawns) {
-                of += color == Us ? -5 : 5;
+            if (pawns[~color]) {
+                of += color == Us ? -5 : 5; // File is half-open
+                if (pawns[color]) {
+                    of += color == Us ? -5 : 5; // File is closed
+                }
             }
         }
     }
@@ -178,6 +185,7 @@ int evaluate(const Position& pos, bool debug) {
         std::cerr << "Color advantage: " << ca << std::endl;
         std::cerr << "Center control: " << cc << std::endl;
         std::cerr << "Knight placement: " << np << std::endl;
+        std::cerr << "Rook placement: " << rp << std::endl;
         std::cerr << "King placement: " << kp << std::endl;
         std::cerr << "Doubled pawns: " << dp << std::endl;
         std::cerr << "Passed pawns: " << pp << std::endl;
@@ -185,7 +193,7 @@ int evaluate(const Position& pos, bool debug) {
         std::cerr << "Open files: " << of << std::endl;
         std::cerr << "Check status: " << cs << std::endl;
     }
-    return mv + ca + cc + np + kp + dp + pp + ip + of + cs;
+    return mv + ca + cc + np + rp + kp + dp + pp + ip + of + cs;
 }
 
 template <Color Us>
