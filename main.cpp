@@ -124,11 +124,11 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
 
                 std::vector<std::string> args;
                 if (current_best_move_score >= piece_values[KING]) {
-                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::ceil((depth - (current_best_move_score - piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::ceil((depth - (current_best_move_score - piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
                 } else if (current_best_move_score <= -piece_values[KING]) {
-                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::floor((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::floor((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
                 } else {
-                    args = std::vector<std::string> {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "pv"};
                 }
                 args.insert(args.end(), pv_strings.begin(), pv_strings.end());
                 uci::send_message("info", args);
