@@ -146,7 +146,7 @@ int main() {
     logger.info("Engine started");
 
 #if defined(ORCA_TIMESTAMP) && defined(ORCA_COMPILER)
-    std::cout << "Orca HCE compiled on " << ORCA_TIMESTAMP << " on compiler " <<  ORCA_COMPILER << std::endl << std::endl;
+    std::cout << "Orca HCE compiled @ " << ORCA_TIMESTAMP << " on compiler " <<  ORCA_COMPILER << std::endl << std::endl;
 #endif
 
     Position pos(DEFAULT_FEN);
