@@ -11,7 +11,7 @@ $(TARGET): $(OBJS)
 
 $(OBJDIR)/main.o: main.cpp $(HEADERS)
 	mkdir -p $(OBJDIR)
-	$(CXX) -c $< $(CXXFLAGS) -o $@
+	$(CXX) -c $< $(CXXFLAGS) -DORCA_TIMESTAMP=\"$(shell date --iso=seconds)\" "-DORCA_COMPILER=\"$(CXX) $(shell $(CXX) -dumpversion)\"" -o $@
 
 $(OBJDIR)/position.o: surge/src/position.cpp surge/src/*.h
 	mkdir -p $(OBJDIR)
