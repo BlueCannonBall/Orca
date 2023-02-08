@@ -56,6 +56,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                 tasks.push_back(pool.schedule([us, depth, move, &mtx, &current_best_move, &current_best_move_score](void* data) {
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
+                    finder->nodes = 0;
 
                     int score;
                     RT::const_iterator entry_it;
@@ -107,7 +108,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                 best_move = current_best_move;
                 unsigned long long nodes = last_move - moves;
                 for (const auto& finder : finders) {
-                    nodes += finder.tt.size();
+                    nodes += finder.nodes;
                 }
 
                 const TT& tt = finders[std::find(moves, last_move, best_move) - moves].tt;

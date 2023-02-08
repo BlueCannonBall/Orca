@@ -28,6 +28,8 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
         }
         hash_move = entry_it->second.best_move;
     }
+    
+    nodes++;
 
     if (depth == 0) {
         return quiesce<Us>(alpha, beta, depth - 1);
@@ -55,7 +57,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
         search.pos.undo<Us>(*move);
 
         if (*move == hash_move) {
-            sort_scores[move->from()][move->to()] = piece_values[KING] * 2;
+            sort_scores[move->from()][move->to()] = 25000;
         } else if (is_killer_move<Us>(*move, depth)) {
             sort_scores[move->from()][move->to()] = piece_values[KING];
         } else {
@@ -161,6 +163,8 @@ int Finder::quiesce(int alpha, int beta, int depth) {
     if (is_stopping()) {
         return 0;
     }
+
+    nodes++;
 
     int evaluation = evaluate<Us>(search.pos);
     if (evaluation >= beta) {

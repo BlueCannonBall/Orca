@@ -48,6 +48,7 @@ public:
     std::chrono::steady_clock::time_point start_time;
     Search search;
     int starting_depth;
+    unsigned long long nodes = 0;
     const std::atomic<bool>& stop;
     TT tt;
     KillerMoves killer_moves;
