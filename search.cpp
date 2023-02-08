@@ -1,5 +1,7 @@
 #include "search.hpp"
+#include "evaluation.hpp"
 #include "surge/src/types.h"
+#include "util.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -28,7 +30,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
         }
         hash_move = entry_it->second.best_move;
     }
-    
+
     nodes++;
 
     if (depth == 0) {
@@ -39,8 +41,8 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
     bool is_pv = alpha != beta - 1;
 
     // Reverse futility pruning
+    int evaluation = evaluate<Us>(search.pos);
     if (!is_pv && !in_check && depth <= 8) {
-        int evaluation = evaluate<Us>(search.pos);
         if (evaluation - (120 * depth) >= beta) {
             return evaluation;
         }
@@ -49,33 +51,56 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
     Move moves[218];
     Move* last_move = search.pos.generate_legals<Us>(moves);
 
-    int move_evaluations[NSQUARES][NSQUARES] = {{0}};
     int sort_scores[NSQUARES][NSQUARES] = {{0}};
     for (const Move* move = moves; move != last_move; move++) {
-        search.pos.play<Us>(*move);
-        move_evaluations[move->from()][move->to()] = evaluate<Us>(search.pos);
-        search.pos.undo<Us>(*move);
-
         if (*move == hash_move) {
             sort_scores[move->from()][move->to()] = 25000;
-        } else if (is_killer_move<Us>(*move, depth)) {
-            sort_scores[move->from()][move->to()] = piece_values[KING];
-        } else {
-            sort_scores[move->from()][move->to()] += move_evaluations[move->from()][move->to()];
+            continue;
+        }
+
+        if (move->flags() == QUIET) {
+            if (is_killer_move<Us>(*move, depth)) {
+                sort_scores[move->from()][move->to()] = 2;
+            }
 
             if (move->is_castling()) {
-                sort_scores[move->from()][move->to()] += 5;
+                sort_scores[move->from()][move->to()] = 1;
             }
-            if (move->is_capture()) {
-                sort_scores[move->from()][move->to()] += 15;
 
-                // Static exchange evaluation
-                if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
-                    sort_scores[move->from()][move->to()] += see<Us>(search.pos, *move);
-                }
+            continue;
+        }
+
+        if (move->is_capture()) {
+            if (move->flags() == EN_PASSANT) {
+                sort_scores[move->from()][move->to()] = 10;
+                continue;
             }
-            if (move->is_promotion()) {
-                sort_scores[move->from()][move->to()] += 50;
+
+            sort_scores[move->from()][move->to()] += mvv_lva(search.pos, *move);
+
+            if (see<Us>(search.pos, *move) >= -100) {
+                sort_scores[move->from()][move->to()] += 10;
+            } else {
+                sort_scores[move->from()][move->to()] -= 30001;
+            }
+        }
+
+        if (move->is_promotion()) {
+            switch (move->promotion()) {
+                case KNIGHT:
+                    sort_scores[move->from()][move->to()] += 5000;
+                    break;
+                case BISHOP:
+                    sort_scores[move->from()][move->to()] += 6000;
+                    break;
+                case ROOK:
+                    sort_scores[move->from()][move->to()] += 7000;
+                    break;
+                case QUEEN:
+                    sort_scores[move->from()][move->to()] += 8000;
+                    break;
+                default:
+                    throw std::logic_error("Invalid promotion");
             }
         }
     }
@@ -86,15 +111,6 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
     Move best_move;
     TTEntryFlag flag = UPPERBOUND;
     for (const Move* move = moves; move != last_move; move++) {
-        // Futility pruning
-        if (depth == 1 && move->flags() == QUIET && !in_check && move_evaluations[move->from()][move->to()] + 200 <= alpha) {
-            continue;
-        }
-        // Razoring
-        if (depth == 2 && move_evaluations[move->from()][move->to()] <= alpha) {
-            break;
-        }
-
         // Late move reduction
         int reduced_depth = depth;
         if (move - moves > 4 && depth > 2) {
@@ -194,23 +210,45 @@ int Finder::quiesce(int alpha, int beta, int depth) {
 
     int sort_scores[NSQUARES][NSQUARES] = {{0}};
     for (const Move* move = moves; move != last_move; move++) {
-        if (move->is_capture()) {
+        for (const Move* move = moves; move != last_move; move++) {
             if (*move == hash_move) {
-                sort_scores[move->from()][move->to()] = piece_values[KING] * 2;
-            } else {
+                sort_scores[move->from()][move->to()] = 25000;
+                continue;
+            }
+
+            if (move->is_capture()) {
+                if (move->flags() == EN_PASSANT) {
+                    sort_scores[move->from()][move->to()] = 10;
+                    continue;
+                }
+
                 sort_scores[move->from()][move->to()] += mvv_lva(search.pos, *move);
 
-                // Static exchange evaluation
-                if (!in_check && !move->is_promotion() && !(move->flags() == EN_PASSANT)) {
-                    sort_scores[move->from()][move->to()] += see<Us>(search.pos, *move);
-                }
-
-                if (move->is_promotion()) {
-                    sort_scores[move->from()][move->to()] += 50;
+                if (see<Us>(search.pos, *move) >= -100) {
+                    sort_scores[move->from()][move->to()] += 10;
+                } else {
+                    sort_scores[move->from()][move->to()] -= 30001;
                 }
             }
-        } else {
-            sort_scores[move->from()][move->to()] = -piece_values[KING] * 2;
+
+            if (move->is_promotion()) {
+                switch (move->promotion()) {
+                    case KNIGHT:
+                        sort_scores[move->from()][move->to()] += 5000;
+                        break;
+                    case BISHOP:
+                        sort_scores[move->from()][move->to()] += 6000;
+                        break;
+                    case ROOK:
+                        sort_scores[move->from()][move->to()] += 7000;
+                        break;
+                    case QUEEN:
+                        sort_scores[move->from()][move->to()] += 8000;
+                        break;
+                    default:
+                        throw std::logic_error("Invalid promotion");
+                }
+            }
         }
     }
     std::sort(moves, last_move, [&sort_scores](Move a, Move b) {
@@ -219,7 +257,7 @@ int Finder::quiesce(int alpha, int beta, int depth) {
 
     for (const Move* move = moves; move != last_move; move++) {
         if (!move->is_capture()) {
-            break;
+            continue;
         }
 
         // Delta pruning
