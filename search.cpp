@@ -210,44 +210,42 @@ int Finder::quiesce(int alpha, int beta, int depth) {
 
     int sort_scores[NSQUARES][NSQUARES] = {{0}};
     for (const Move* move = moves; move != last_move; move++) {
-        for (const Move* move = moves; move != last_move; move++) {
-            if (*move == hash_move) {
-                sort_scores[move->from()][move->to()] = 25000;
+        if (*move == hash_move) {
+            sort_scores[move->from()][move->to()] = 25000;
+            continue;
+        }
+
+        if (move->is_capture()) {
+            if (move->flags() == EN_PASSANT) {
+                sort_scores[move->from()][move->to()] = 10;
                 continue;
             }
 
-            if (move->is_capture()) {
-                if (move->flags() == EN_PASSANT) {
-                    sort_scores[move->from()][move->to()] = 10;
-                    continue;
-                }
+            sort_scores[move->from()][move->to()] += mvv_lva(search.pos, *move);
 
-                sort_scores[move->from()][move->to()] += mvv_lva(search.pos, *move);
-
-                if (see<Us>(search.pos, *move) >= -100) {
-                    sort_scores[move->from()][move->to()] += 10;
-                } else {
-                    sort_scores[move->from()][move->to()] -= 30001;
-                }
+            if (see<Us>(search.pos, *move) >= -100) {
+                sort_scores[move->from()][move->to()] += 10;
+            } else {
+                sort_scores[move->from()][move->to()] -= 30001;
             }
+        }
 
-            if (move->is_promotion()) {
-                switch (move->promotion()) {
-                    case KNIGHT:
-                        sort_scores[move->from()][move->to()] += 5000;
-                        break;
-                    case BISHOP:
-                        sort_scores[move->from()][move->to()] += 6000;
-                        break;
-                    case ROOK:
-                        sort_scores[move->from()][move->to()] += 7000;
-                        break;
-                    case QUEEN:
-                        sort_scores[move->from()][move->to()] += 8000;
-                        break;
-                    default:
-                        throw std::logic_error("Invalid promotion");
-                }
+        if (move->is_promotion()) {
+            switch (move->promotion()) {
+                case KNIGHT:
+                    sort_scores[move->from()][move->to()] += 5000;
+                    break;
+                case BISHOP:
+                    sort_scores[move->from()][move->to()] += 6000;
+                    break;
+                case ROOK:
+                    sort_scores[move->from()][move->to()] += 7000;
+                    break;
+                case QUEEN:
+                    sort_scores[move->from()][move->to()] += 8000;
+                    break;
+                default:
+                    throw std::logic_error("Invalid promotion");
             }
         }
     }
