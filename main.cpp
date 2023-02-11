@@ -80,24 +80,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                         if (repetition) {
                             score = 0;
                         } else {
-                            if (depth > 1) {
-                                int alpha_window_size = 25;
-                                int beta_window_size = 25;
-                                for (;;) {
-                                    int alpha = -finder->last_score - alpha_window_size;
-                                    int beta = finder->last_score + beta_window_size;
-                                    score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, alpha, beta, depth - 1);
-                                    if (score <= alpha) {
-                                        alpha_window_size *= 5;
-                                    } else if (score >= beta) {
-                                        beta_window_size *= 5;
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            } else {
-                                score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, -piece_values[KING] * 2, piece_values[KING] * 2, depth - 1);
-                            }
+                            score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, -piece_values[KING] * 2, piece_values[KING] * 2, depth - 1);
                         }
                     }
                     DYN_COLOR_CALL(finder->search.pos.undo, us, move);
@@ -143,9 +126,9 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
 
                 std::vector<std::string> args;
                 if (current_best_move_score >= piece_values[KING]) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::ceil((depth - (current_best_move_score - piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string(std::max(1, (int) std::ceil((depth - (current_best_move_score - piece_values[KING])) / 2.f))), "nodes", std::to_string(nodes), "pv"};
                 } else if (current_best_move_score <= -piece_values[KING]) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::floor((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string(std::max(-1, (int) std::floor((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f))), "nodes", std::to_string(nodes), "pv"};
                 } else {
                     args = {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "pv"};
                 }

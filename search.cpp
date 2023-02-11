@@ -48,6 +48,11 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
         }
     }
 
+    // Check extensions
+    if (in_check) {
+        depth++;
+    }
+
     Move moves[218];
     Move* last_move = search.pos.generate_legals<Us>(moves);
 
@@ -111,8 +116,9 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
     Move best_move;
     TTEntryFlag flag = UPPERBOUND;
     for (const Move* move = moves; move != last_move; move++) {
-        // Late move reduction
         int reduced_depth = depth;
+
+        // Late move reduction
         if (move - moves > 4 && depth > 2) {
             reduced_depth -= 2;
         }
