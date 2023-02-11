@@ -44,7 +44,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
         Move ponder_move;
         int max_game_ply = search.target_depth == -1 ? NHISTORY : (search.pos.game_ply + search.target_depth);
 
-        for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply; depth++) {
+        for (int depth = 3; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply; depth++) {
             std::mutex mtx;
             Move current_best_move;
             int current_best_move_score = INT_MIN;
@@ -126,9 +126,9 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
 
                 std::vector<std::string> args;
                 if (current_best_move_score >= piece_values[KING]) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string(std::max(1, (int) std::ceil((depth - (current_best_move_score - piece_values[KING])) / 2.f))), "nodes", std::to_string(nodes), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::ceil((depth - (current_best_move_score - piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
                 } else if (current_best_move_score <= -piece_values[KING]) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string(std::max(-1, (int) std::floor((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f))), "nodes", std::to_string(nodes), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::floor((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
                 } else {
                     args = {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "pv"};
                 }
@@ -296,7 +296,7 @@ int main() {
                         if (movetime != 0ms) {
                             search_time = movetime;
                         } else if (wtime != 0ms) {
-                            search_time = std::min(wtime / moves_left, 30000ms);
+                            search_time = wtime / moves_left;
                         }
 
                         if (search_time - 500ms < winc) {
@@ -306,7 +306,7 @@ int main() {
                         if (movetime != 0ms) {
                             search_time = movetime;
                         } else if (btime != 0ms) {
-                            search_time = std::min(btime / moves_left, 30000ms);
+                            search_time = btime / moves_left;
                         }
 
                         if (search_time - 500ms < binc) {

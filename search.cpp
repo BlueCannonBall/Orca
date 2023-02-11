@@ -48,11 +48,6 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
         }
     }
 
-    // Check extensions
-    if (in_check) {
-        depth++;
-    }
-
     Move moves[218];
     Move* last_move = search.pos.generate_legals<Us>(moves);
 
