@@ -49,6 +49,7 @@ public:
     Search search;
     int starting_depth;
     unsigned long long nodes = 0;
+    int last_score;
     const std::atomic<bool>& stop;
     TT tt;
     KillerMoves killer_moves;

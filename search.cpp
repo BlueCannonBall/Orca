@@ -61,13 +61,13 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
         if (move->flags() == QUIET) {
             if (is_killer_move<Us>(*move, depth)) {
                 sort_scores[move->from()][move->to()] = 2;
+                continue;
             }
 
             if (move->is_castling()) {
                 sort_scores[move->from()][move->to()] = 1;
+                continue;
             }
-
-            continue;
         }
 
         if (move->is_capture()) {
@@ -120,7 +120,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
         // Principle variation search
         int score;
         search.pos.play<Us>(*move);
-        if (hash_move.is_null() || *move == hash_move) {
+        if (hash_move.is_null() || *move == hash_move || moves[0] != hash_move) {
             score = -alpha_beta<~Us>(-beta, -alpha, reduced_depth - 1);
         } else {
             score = -alpha_beta<~Us>(-alpha - 1, -alpha, reduced_depth - 1);
@@ -196,6 +196,7 @@ int Finder::quiesce(int alpha, int beta, int depth) {
     }
 
     bool in_check = search.pos.in_check<Us>();
+    bool late_endgame = !has_non_pawn_material(search.pos, Us);
 
     Move moves[218];
     Move* last_move = search.pos.generate_legals<Us>(moves);
@@ -259,7 +260,7 @@ int Finder::quiesce(int alpha, int beta, int depth) {
         }
 
         // Delta pruning
-        if (piece_values[type_of(search.pos.at(move->to()))] + 200 <= alpha) {
+        if (piece_values[type_of(search.pos.at(move->to()))] + 200 <= alpha && !late_endgame) {
             continue;
         }
 
