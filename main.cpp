@@ -44,7 +44,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
         Move ponder_move;
         int max_game_ply = search.target_depth == -1 ? NHISTORY : (search.pos.game_ply + search.target_depth);
 
-        for (int depth = 3; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply; depth++) {
+        for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply; depth++) {
             std::mutex mtx;
             Move current_best_move;
             int current_best_move_score = INT_MIN;
@@ -296,7 +296,7 @@ int main() {
                         if (movetime != 0ms) {
                             search_time = movetime;
                         } else if (wtime != 0ms) {
-                            search_time = wtime / moves_left;
+                            search_time = std::min(wtime / moves_left, 30000ms);
                         }
 
                         if (search_time - 500ms < winc) {
@@ -306,7 +306,7 @@ int main() {
                         if (movetime != 0ms) {
                             search_time = movetime;
                         } else if (btime != 0ms) {
-                            search_time = btime / moves_left;
+                            search_time = std::min(btime / moves_left, 30000ms);
                         }
 
                         if (search_time - 500ms < binc) {
