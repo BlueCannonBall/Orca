@@ -10,7 +10,7 @@ int evaluate(const Position& pos, bool debug) {
     int mv = 0;
     int our_mv = 0;
     int their_mv = 0;
-    for (PieceType i = PAWN; i < NPIECE_TYPES; ++i) {
+    for (PieceType i = PAWN; i < NPIECE_TYPES - 1; ++i) {
         our_mv += pop_count(pos.bitboard_of(Us, i)) * piece_values[i];
         their_mv += pop_count(pos.bitboard_of(~Us, i)) * piece_values[i];
     }
@@ -21,7 +21,7 @@ int evaluate(const Position& pos, bool debug) {
     // Color advantage
     int ca = 0;
     if (progress == MIDGAME) {
-        ca = (Us == WHITE) ? 20 : -20;
+        ca = (Us == WHITE) ? 15 : -15;
     }
 
     // Center control

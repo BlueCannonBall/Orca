@@ -68,6 +68,9 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
                 sort_scores[move->from()][move->to()] = 1;
                 continue;
             }
+
+            sort_scores[move->from()][move->to()] = -30000 + get_history_score(*move);
+            continue;
         }
 
         if (move->is_capture()) {
@@ -140,6 +143,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
             if (score >= beta) {
                 if (move->flags() == QUIET) {
                     add_killer_move<Us>(*move, depth);
+                    update_history_score(*move, depth);
                 }
                 flag = LOWERBOUND;
                 alpha = beta;
@@ -301,6 +305,21 @@ bool Finder::is_killer_move(Move move, int depth) const {
         }
     }
     return ret;
+}
+
+int Finder::get_history_score(Move move) const {
+    return history_scores[move.from()][move.to()];
+}
+
+void Finder::update_history_score(Move move, int depth) {
+    history_scores[move.from()][move.to()] += depth * depth;
+    if (history_scores[move.from()][move.to()] >= 30000) {
+        for (Square sq1 = a1; sq1 < NO_SQUARE; ++sq1) {
+            for (Square sq2 = a1; sq2 < NO_SQUARE; ++sq2) {
+                history_scores[sq1][sq2] >>= 1; // Divide by two
+            }
+        }
+    }
 }
 
 std::vector<Move> get_pv(Position pos, const TT& tt) {

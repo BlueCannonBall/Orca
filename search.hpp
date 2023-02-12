@@ -53,6 +53,7 @@ public:
     const std::atomic<bool>& stop;
     TT tt;
     KillerMoves killer_moves;
+    int history_scores[NSQUARES][NSQUARES];
 
     Finder(std::chrono::steady_clock::time_point start_time, const Search& search, const std::atomic<bool>& stop) :
         start_time(start_time),
@@ -75,6 +76,9 @@ protected:
 
     template <Color Us>
     bool is_killer_move(Move move, int depth) const;
+
+    int get_history_score(Move move) const;
+    void update_history_score(Move move, int depth);
 };
 
 std::vector<Move> get_pv(Position pos, const TT& tt);
