@@ -1,6 +1,6 @@
 CXX = g++
-CXXFLAGS = -Wall -std=c++14 -Ofast -flto -march=native -mtune=native -pthread
-LIBS = -lboost_fiber
+CXXFLAGS = -Wall -std=c++14 -static -Ofast -flto -march=native -mtune=native -pthread
+LIBS = -lboost_context -lboost_fiber -lboost_thread
 HEADERS = $(shell find . -name "*.h" -o -name "*.hpp")
 OBJDIR = obj
 OBJS = $(OBJDIR)/main.o $(OBJDIR)/position.o $(OBJDIR)/tables.o $(OBJDIR)/types.o $(OBJDIR)/util.o $(OBJDIR)/evaluation.o $(OBJDIR)/search.o

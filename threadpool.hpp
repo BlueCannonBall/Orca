@@ -1,13 +1,13 @@
 #ifndef _THREADPOOL_HPP
 #define _THREADPOOL_HPP
 
+#include <boost/thread.hpp>
 #include <condition_variable>
 #include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <queue>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -112,14 +112,14 @@ namespace tp {
             }
         }
 
-        std::vector<std::pair<std::thread, CommandQueue*>> threads;
+        std::vector<std::pair<boost::thread, CommandQueue*>> threads;
         unsigned int sched_counter = 0;
 
     public:
-        ThreadPool(unsigned int pool_size = std::thread::hardware_concurrency()) {
+        ThreadPool(unsigned int pool_size = boost::thread::hardware_concurrency()) {
             for (unsigned int i = 0; i < pool_size; i++) {
                 auto new_queue = new CommandQueue;
-                std::thread new_thread(&ThreadPool::runner, this, new_queue);
+                boost::thread new_thread(&ThreadPool::runner, this, new_queue);
                 threads.push_back({std::move(new_thread), new_queue});
             }
         };
@@ -179,7 +179,7 @@ namespace tp {
             } else {
                 for (unsigned int i = threads.size(); i < new_pool_size; i++) {
                     auto new_queue = new CommandQueue;
-                    std::thread new_thread(&ThreadPool::runner, this, new_queue);
+                    boost::thread new_thread(&ThreadPool::runner, this, new_queue);
                     threads.push_back({std::move(new_thread), new_queue});
                 }
             }

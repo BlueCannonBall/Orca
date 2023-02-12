@@ -8,10 +8,10 @@
 #include "util.hpp"
 #include <atomic>
 #include <boost/fiber/unbuffered_channel.hpp>
+#include <boost/thread.hpp>
 #include <chrono>
 #include <cmath>
 #include <string>
-#include <thread>
 #include <vector>
 
 void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool>& stop) {
@@ -169,7 +169,7 @@ int main() {
 
     std::atomic<bool> stop(false);
     boost::fibers::unbuffered_channel<Search> channel;
-    std::thread worker_thread(std::bind(worker, std::ref(channel), std::ref(stop)));
+    boost::thread worker_thread(std::bind(worker, std::ref(channel), std::ref(stop)));
 
     for (;;) {
         auto message = uci::poll();
@@ -312,8 +312,8 @@ int main() {
                             search_time = std::min(wtime / moves_left, 30000ms);
                         }
 
-                        if (search_time - 500ms < winc) {
-                            search_time = winc - 500ms;
+                        if (std::max(search_time - 250ms, 0ms) < winc) {
+                            search_time = winc - 250ms;
                         }
                     } else if (pos.turn() == BLACK) {
                         if (movetime != 0ms) {
@@ -322,8 +322,8 @@ int main() {
                             search_time = std::min(btime / moves_left, 30000ms);
                         }
 
-                        if (search_time - 500ms < binc) {
-                            search_time = binc - 500ms;
+                        if (std::max(search_time - 250ms, 0ms) < binc) {
+                            search_time = binc - 250ms;
                         }
                     } else {
                         throw std::logic_error("Invalid side to move");
