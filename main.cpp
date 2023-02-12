@@ -48,12 +48,13 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
             std::mutex mtx;
             Move current_best_move;
             int current_best_move_score = INT_MIN;
+            int current_best_move_static_evaluation = INT_MIN;
 
             std::vector<std::shared_ptr<tp::Task>> tasks;
 
             for (Move* move_ptr = moves; move_ptr != last_move; move_ptr++) {
                 Move move = *move_ptr;
-                tasks.push_back(pool.schedule([us, depth, move, &mtx, &current_best_move, &current_best_move_score](void* data) {
+                tasks.push_back(pool.schedule([us, depth, move, &mtx, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation](void* data) {
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
                     finder->nodes = 0;
@@ -61,8 +62,10 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                     memset(finder->history_scores, 0, sizeof(finder->history_scores));
 
                     int score;
+                    int static_evaluation;
                     RT::const_iterator entry_it;
                     DYN_COLOR_CALL(finder->search.pos.play, us, move);
+                    static_evaluation = DYN_COLOR_CALL(evaluate, us, finder->search.pos);
                     if ((entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && entry_it->second + 1 == 3) {
                         score = 0;
                     } else {
@@ -93,6 +96,11 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                         if (score > current_best_move_score) {
                             current_best_move = move;
                             current_best_move_score = score;
+                            current_best_move_static_evaluation = static_evaluation;
+                        } else if (score == current_best_move_score && static_evaluation > current_best_move_static_evaluation) {
+                            current_best_move = move;
+                            current_best_move_score = score;
+                            current_best_move_static_evaluation = static_evaluation;
                         }
                         mtx.unlock();
                     }
@@ -126,13 +134,16 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                 std::vector<std::string> pv_strings;
                 std::transform(pv.cbegin(), pv.cend(), std::back_inserter(pv_strings), uci::format_move);
 
+                std::chrono::milliseconds time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time);
+                unsigned long long nps = (nodes / std::max(time_elapsed.count(), 1l)) * 1000;
+
                 std::vector<std::string> args;
                 if (current_best_move_score >= piece_values[KING]) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::ceil((depth - (current_best_move_score - piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::ceil((depth - (current_best_move_score - piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
                 } else if (current_best_move_score <= -piece_values[KING]) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::floor((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::floor((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
                 } else {
-                    args = {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
                 }
                 args.insert(args.end(), pv_strings.begin(), pv_strings.end());
                 uci::send_message("info", args);
