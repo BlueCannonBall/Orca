@@ -58,8 +58,6 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
                     finder->nodes = 0;
-                    memset(finder->killer_moves, 0, sizeof(finder->killer_moves));
-                    memset(finder->history_scores, 0, sizeof(finder->history_scores));
 
                     int score;
                     int static_evaluation;
@@ -89,7 +87,6 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                         }
                     }
                     DYN_COLOR_CALL(finder->search.pos.undo, us, move);
-                    finder->last_score = score;
 
                     if (!finder->is_stopping()) {
                         mtx.lock();

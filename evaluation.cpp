@@ -36,6 +36,29 @@ int evaluate(const Position& pos, bool debug) {
     np -= pop_count(pos.bitboard_of(Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
     np += pop_count(pos.bitboard_of(~Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
 
+    // Bishop placement
+    int bp = 0;
+    for (Color color = WHITE; color < NCOLORS; ++color) {
+        Bitboard bishops = pos.bitboard_of(color, BISHOP);
+        unsigned short white_square_count = 0;
+        unsigned short black_square_count = 0;
+
+        if (pop_count(bishops) >= 2) {
+            while (bishops) {
+                Square bishop = pop_lsb(&bishops);
+                if (bishop % 2 != 0) {
+                    white_square_count++;
+                } else {
+                    black_square_count++;
+                }
+            }
+        }
+
+        if (white_square_count && black_square_count) {
+            bp += color == Us ? 50 : -50;
+        }
+    }
+
     // Rook placement
     int rp = 0;
     rp += pop_count(pos.bitboard_of(Us, ROOK) & MASK_RANK[Us == WHITE ? RANK7 : RANK2]) * 30;
@@ -185,6 +208,7 @@ int evaluate(const Position& pos, bool debug) {
         std::cerr << "Color advantage: " << ca << std::endl;
         std::cerr << "Center control: " << cc << std::endl;
         std::cerr << "Knight placement: " << np << std::endl;
+        std::cerr << "Bishop placement: " << bp << std::endl;
         std::cerr << "Rook placement: " << rp << std::endl;
         std::cerr << "King placement: " << kp << std::endl;
         std::cerr << "Doubled pawns: " << dp << std::endl;
@@ -193,7 +217,7 @@ int evaluate(const Position& pos, bool debug) {
         std::cerr << "Open files: " << of << std::endl;
         std::cerr << "Check status: " << cs << std::endl;
     }
-    return mv + ca + cc + np + rp + kp + dp + pp + ip + of + cs;
+    return mv + ca + cc + np + bp + rp + kp + dp + pp + ip + of + cs;
 }
 
 template <Color Us>

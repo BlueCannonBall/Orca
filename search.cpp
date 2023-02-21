@@ -200,18 +200,13 @@ int Finder::quiesce(int alpha, int beta, int depth) {
         hash_move = entry_it->second.best_move;
     }
 
-    bool in_check = search.pos.in_check<Us>();
     bool late_endgame = !has_non_pawn_material(search.pos, Us);
 
     Move moves[218];
     Move* last_move = search.pos.generate_legals<Us>(moves);
 
     if (moves == last_move) {
-        if (in_check) {
-            return -piece_values[KING] - depth;
-        } else {
-            return 0;
-        }
+        return 0;
     }
 
     int sort_scores[NSQUARES][NSQUARES] = {{0}};

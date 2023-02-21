@@ -49,7 +49,6 @@ public:
     Search search;
     int starting_depth;
     unsigned long long nodes = 0;
-    int last_score;
     const std::atomic<bool>& stop;
     TT tt;
     KillerMoves killer_moves;
@@ -58,7 +57,10 @@ public:
     Finder(std::chrono::steady_clock::time_point start_time, const Search& search, const std::atomic<bool>& stop) :
         start_time(start_time),
         search(search),
-        stop(stop) { }
+        stop(stop) {
+        memset(this->killer_moves, 0, sizeof(this->killer_moves));
+        memset(this->history_scores, 0, sizeof(this->history_scores));
+    }
 
     template <Color Us>
     int alpha_beta(int alpha, int beta, int depth);
