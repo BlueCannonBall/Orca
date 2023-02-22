@@ -2,6 +2,7 @@
 #include "surge/src/types.h"
 #include "util.hpp"
 #include <cassert>
+#include <cmath>
 #include <iostream>
 
 template <Color Us>
@@ -32,30 +33,32 @@ int evaluate(const Position& pos, bool debug) {
     if (pos.at(e4) != NO_PIECE) cc += (color_of(pos.at(e4)) == Us) ? 25 : -25;
 
     // Knight placement
+    const static Bitboard edges_mask = MASK_FILE[AFILE] | MASK_RANK[RANK1] | MASK_FILE[HFILE] | MASK_RANK[RANK8];
     int np = 0;
-    np -= pop_count(pos.bitboard_of(Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
-    np += pop_count(pos.bitboard_of(~Us, KNIGHT) & MASK_FILE[AFILE] & MASK_RANK[RANK1] & MASK_FILE[HFILE] & MASK_RANK[RANK8]) * 50;
+    np -= pop_count(pos.bitboard_of(Us, KNIGHT) & edges_mask) * 50;
+    np += pop_count(pos.bitboard_of(~Us, KNIGHT) & edges_mask) * 50;
 
     // Bishop placement
+    static constexpr Bitboard black_squares = 0xAA55AA55AA55AA55;
     int bp = 0;
     for (Color color = WHITE; color < NCOLORS; ++color) {
-        Bitboard bishops = pos.bitboard_of(color, BISHOP);
         unsigned short white_square_count = 0;
         unsigned short black_square_count = 0;
 
-        if (pop_count(bishops) >= 2) {
-            while (bishops) {
-                Square bishop = pop_lsb(&bishops);
-                if (bishop % 2 != 0) {
-                    white_square_count++;
-                } else {
-                    black_square_count++;
-                }
-            }
-        }
+        Bitboard bishops = pos.bitboard_of(color, BISHOP);
+        while (bishops) {
+            Square bishop = pop_lsb(&bishops);
 
-        if (white_square_count && black_square_count) {
-            bp += color == Us ? 50 : -50;
+            if ((black_squares >> bishop) & 1) {
+                black_square_count++;
+            } else {
+                white_square_count++;
+            }
+
+            if (white_square_count && black_square_count) {
+                bp += color == Us ? 50 : -50;
+                break;
+            }
         }
     }
 
@@ -91,15 +94,9 @@ int evaluate(const Position& pos, bool debug) {
 
     // Doubled pawns
     int dp = 0;
-    for (File file = AFILE; file < HFILE; ++file) {
-        int our_pawn_count = sparse_pop_count(pos.bitboard_of(Us, PAWN) & MASK_FILE[file]);
-        int their_pawn_count = sparse_pop_count(pos.bitboard_of(~Us, PAWN) & MASK_FILE[file]);
-        if (our_pawn_count > 1) {
-            dp -= (our_pawn_count - 1) * 75;
-        }
-        if (their_pawn_count > 1) {
-            dp += (their_pawn_count - 1) * 75;
-        }
+    for (File file = AFILE; file < NFILES; ++file) {
+        dp -= std::max(pop_count(pos.bitboard_of(Us, PAWN) & MASK_FILE[file]) - 1, 0) * 75;
+        dp += std::max(pop_count(pos.bitboard_of(~Us, PAWN) & MASK_FILE[file]) - 1, 0) * 75;
     }
 
     // Passed pawns
@@ -204,18 +201,18 @@ int evaluate(const Position& pos, bool debug) {
 
     // Sum up various scores
     if (debug) {
-        std::cerr << "Material value: " << mv << std::endl;
-        std::cerr << "Color advantage: " << ca << std::endl;
-        std::cerr << "Center control: " << cc << std::endl;
-        std::cerr << "Knight placement: " << np << std::endl;
-        std::cerr << "Bishop placement: " << bp << std::endl;
-        std::cerr << "Rook placement: " << rp << std::endl;
-        std::cerr << "King placement: " << kp << std::endl;
-        std::cerr << "Doubled pawns: " << dp << std::endl;
-        std::cerr << "Passed pawns: " << pp << std::endl;
-        std::cerr << "Isolated pawns: " << ip << std::endl;
-        std::cerr << "Open files: " << of << std::endl;
-        std::cerr << "Check status: " << cs << std::endl;
+        std::cerr << "info string material value " << mv << std::endl;
+        std::cerr << "info string color advantage " << ca << std::endl;
+        std::cerr << "info string center control " << cc << std::endl;
+        std::cerr << "info string knight placement " << np << std::endl;
+        std::cerr << "info string bishop placement " << bp << std::endl;
+        std::cerr << "info string rook placement " << rp << std::endl;
+        std::cerr << "info string king placement " << kp << std::endl;
+        std::cerr << "info string doubled pawns " << dp << std::endl;
+        std::cerr << "info string passed pawns " << pp << std::endl;
+        std::cerr << "info string isolated pawns " << ip << std::endl;
+        std::cerr << "info string open files " << of << std::endl;
+        std::cerr << "info string check status " << cs << std::endl;
     }
     return mv + ca + cc + np + bp + rp + kp + dp + pp + ip + of + cs;
 }
