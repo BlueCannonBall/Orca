@@ -2,11 +2,9 @@
 #define _THREADPOOL_HPP
 
 #include <boost/thread.hpp>
-#include <condition_variable>
 #include <exception>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <queue>
 #include <utility>
 #include <vector>
@@ -26,8 +24,8 @@ namespace tp {
     class Command {
     private:
         friend class ThreadPool;
-        std::mutex mutex;
-        std::condition_variable condition;
+        boost::mutex mutex;
+        boost::condition_variable condition;
 
     public:
         CommandType type;
@@ -41,7 +39,7 @@ namespace tp {
             data(data) { }
 
         CommandStatus await() {
-            std::unique_lock<std::mutex> lock(mutex);
+            boost::unique_lock<boost::mutex> lock(mutex);
             while (status == CommandStatus::Running) {
                 condition.wait(lock);
             }
@@ -69,13 +67,13 @@ namespace tp {
     protected:
         struct CommandQueue {
             std::queue<std::shared_ptr<Command>> queue;
-            std::mutex mutex;
-            std::condition_variable condition;
+            boost::mutex mutex;
+            boost::condition_variable condition;
         };
 
         void runner(CommandQueue* commands) {
             for (;;) {
-                std::unique_lock<std::mutex> lock(commands->mutex);
+                boost::unique_lock<boost::mutex> lock(commands->mutex);
                 while (commands->queue.empty()) {
                     commands->condition.wait(lock);
                 }
@@ -93,10 +91,10 @@ namespace tp {
                         try {
                             cmd->func(cmd->arg);
 
-                            std::unique_lock<std::mutex> lock(cmd->mutex);
+                            boost::unique_lock<boost::mutex> lock(cmd->mutex);
                             cmd->status = CommandStatus::Success;
                         } catch (const std::exception& e) {
-                            std::unique_lock<std::mutex> lock(cmd->mutex);
+                            boost::unique_lock<boost::mutex> lock(cmd->mutex);
                             cmd->status = CommandStatus::Failure;
                             cmd->error = e;
                         }
@@ -129,7 +127,7 @@ namespace tp {
                 auto cmd = std::make_shared<Command>(CommandType::Quit);
 
                 {
-                    std::unique_lock<std::mutex> lock(thread.second->mutex);
+                    boost::unique_lock<boost::mutex> lock(thread.second->mutex);
                     thread.second->queue.push(std::move(cmd));
                 }
                 thread.second->condition.notify_one();
@@ -146,7 +144,7 @@ namespace tp {
             auto cmd = std::make_shared<CommandExecute>(std::move(func), arg, data);
 
             {
-                std::unique_lock<std::mutex> lock(commands->mutex);
+                boost::unique_lock<boost::mutex> lock(commands->mutex);
                 commands->queue.push(cmd);
             }
 
@@ -166,7 +164,7 @@ namespace tp {
                     auto cmd = std::make_shared<Command>(CommandType::Quit);
 
                     {
-                        std::unique_lock<std::mutex> lock(threads[sched_counter].second->mutex);
+                        boost::unique_lock<boost::mutex> lock(threads[sched_counter].second->mutex);
                         threads[sched_counter].second->queue.push(std::move(cmd));
                     }
                     threads[sched_counter].second->condition.notify_one();

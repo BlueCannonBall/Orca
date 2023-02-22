@@ -6,23 +6,27 @@
 #include "threadpool.hpp"
 #include "uci.hpp"
 #include "util.hpp"
-#include <atomic>
+#include <boost/atomic.hpp>
 #include <boost/fiber/unbuffered_channel.hpp>
 #include <boost/thread.hpp>
 #include <chrono>
 #include <cmath>
+#include <map>
 #include <string>
 #include <vector>
 
-void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool>& stop) {
+void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bool>& stop) {
     tp::ThreadPool pool;
+    std::map<boost::thread::id, TT> tts;
     Search search;
     while (channel.pop(search) == boost::fibers::channel_op_status::success) {
-        if (search.quit) {
+        if (search.new_game) {
+            tts.clear();
+        } else if (search.quit) {
             return;
         }
 
-        stop.store(false, std::memory_order_relaxed);
+        stop.store(false, boost::memory_order_relaxed);
 
         Color us = search.pos.turn();
 
@@ -37,7 +41,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
         std::vector<Finder> finders(last_move - moves, Finder(start_time, search, stop));
 
         const auto is_stopping = [start_time, &search, &stop](int depth) {
-            return depth > 1 && (std::chrono::steady_clock::now() - start_time > search.time || stop.load(std::memory_order_relaxed));
+            return depth > 1 && (std::chrono::steady_clock::now() - start_time > search.time || stop.load(boost::memory_order_relaxed));
         };
 
         Move best_move;
@@ -45,7 +49,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
         int max_game_ply = search.target_depth == -1 ? NHISTORY : (search.pos.game_ply + search.target_depth);
 
         for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply; depth++) {
-            std::mutex mtx;
+            boost::mutex mtx;
             Move current_best_move;
             int current_best_move_score = INT_MIN;
             int current_best_move_static_evaluation = INT_MIN;
@@ -54,10 +58,11 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
 
             for (Move* move_ptr = moves; move_ptr != last_move; move_ptr++) {
                 Move move = *move_ptr;
-                tasks.push_back(pool.schedule([us, depth, move, &mtx, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation](void* data) {
+                tasks.push_back(pool.schedule([&tts, us, depth, &mtx, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
                     finder->nodes = 0;
+                    finder->tt = &tts[boost::this_thread::get_id()];
 
                     int score;
                     int static_evaluation;
@@ -119,9 +124,8 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                     nodes += finder.nodes;
                 }
 
-                const TT& tt = finders[std::find(moves, last_move, best_move) - moves].tt;
                 DYN_COLOR_CALL(search.pos.play, us, best_move);
-                std::vector<Move> pv = get_pv(search.pos, tt);
+                std::vector<Move> pv = get_pv(search.pos, finders[std::find(moves, last_move, best_move) - moves].tt);
                 pv.insert(pv.begin(), best_move);
                 pv.resize(std::min((int) pv.size(), depth));
                 if (pv.size() > 1) {
@@ -135,10 +139,10 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
                 unsigned long long nps = (nodes / std::max(time_elapsed.count(), 1l)) * 1000;
 
                 std::vector<std::string> args;
-                if (current_best_move_score >= piece_values[KING]) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::ceil((depth - (current_best_move_score - piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
-                } else if (current_best_move_score <= -piece_values[KING]) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((int) std::floor((-depth + std::abs(current_best_move_score + piece_values[KING])) / 2.f)), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                if (current_best_move_score >= piece_values[KING] - NHISTORY) {
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((piece_values[KING] - current_best_move_score + 1) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                } else if (current_best_move_score <= -piece_values[KING] + NHISTORY) {
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string(-(current_best_move_score + piece_values[KING]) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
                 } else {
                     args = {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
                 }
@@ -148,6 +152,16 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, std::atomic<bool
         }
 
         uci::bestmove(best_move, ponder_move);
+
+        for (auto& tt : tts) {
+            for (auto entry_it = tt.second.begin(); entry_it != tt.second.end();) {
+                if (--entry_it->second.depth <= 0) {
+                    entry_it = tt.second.erase(entry_it);
+                } else {
+                    ++entry_it;
+                }
+            }
+        }
     }
 }
 
@@ -163,8 +177,9 @@ int main() {
 
     Position pos(DEFAULT_FEN);
     RT rt;
+    bool new_game = false;
 
-    std::atomic<bool> stop(false);
+    boost::atomic<bool> stop(false);
     boost::fibers::unbuffered_channel<Search> channel;
     boost::thread worker_thread(std::bind(worker, std::ref(channel), std::ref(stop)));
 
@@ -183,6 +198,12 @@ int main() {
             str_case("isready") :
             {
                 uci::send_message("readyok");
+                break;
+            }
+
+            str_case("ucinewgame") :
+            {
+                new_game = true;
                 break;
             }
 
@@ -332,7 +353,9 @@ int main() {
                     .rt = rt,
                     .time = search_time,
                     .target_depth = depth,
+                    .new_game = new_game,
                 });
+                new_game = false;
 
                 break;
             }
@@ -340,13 +363,13 @@ int main() {
             str_case("stop") :
                 str_case("ponderhit") :
             {
-                stop.store(true, std::memory_order_relaxed);
+                stop.store(true, boost::memory_order_relaxed);
                 break;
             }
 
             str_case("quit") :
             {
-                stop.store(true, std::memory_order_relaxed);
+                stop.store(true, boost::memory_order_relaxed);
                 channel.push(Search {
                     .quit = true,
                 });

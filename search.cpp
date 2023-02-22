@@ -12,9 +12,25 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
         return 0;
     }
 
+    // Mate distance pruning
+    int mate_value = piece_values[KING] - current_ply();
+    alpha = std::max(alpha, -mate_value);
+    beta = std::min(beta, mate_value - 1);
+    if (alpha >= beta) {
+        nodes++;
+        return alpha;
+    }
+
+    bool in_check = search.pos.in_check<Us>();
+
+    // Check extensions
+    if (in_check) {
+        depth++;
+    }
+
     Move hash_move;
     TT::iterator entry_it;
-    if ((entry_it = tt.find(search.pos.get_hash())) != tt.end()) {
+    if ((entry_it = tt->find(search.pos.get_hash())) != tt->end()) {
         if (entry_it->second.depth >= depth) {
             if (entry_it->second.flag == EXACT) {
                 return entry_it->second.score;
@@ -33,11 +49,10 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
 
     nodes++;
 
-    if (depth == 0) {
+    if (depth <= 0) {
         return quiesce<Us>(alpha, beta, depth - 1);
     }
 
-    bool in_check = search.pos.in_check<Us>();
     bool is_pv = alpha != beta - 1;
 
     // Reverse futility pruning
@@ -59,7 +74,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
         }
 
         if (move->flags() == QUIET) {
-            if (is_killer_move<Us>(*move, depth)) {
+            if (is_killer_move<Us>(*move, current_ply())) {
                 sort_scores[move->from()][move->to()] = 2;
                 continue;
             }
@@ -142,7 +157,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
             best_move = *move;
             if (score >= beta) {
                 if (move->flags() == QUIET) {
-                    add_killer_move<Us>(*move, depth);
+                    add_killer_move<Us>(*move, current_ply());
                     update_history_score(*move, depth);
                 }
                 flag = LOWERBOUND;
@@ -156,7 +171,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
 
     if (moves == last_move) {
         if (in_check) {
-            alpha = -piece_values[KING] - depth;
+            alpha = -mate_value;
         } else {
             alpha = 0;
         }
@@ -165,14 +180,14 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
     }
 
     if (!is_stopping()) {
-        if (entry_it != tt.end()) {
+        if (entry_it != tt->end()) {
             entry_it->second.score = alpha;
             entry_it->second.depth = depth;
             entry_it->second.best_move = best_move;
             entry_it->second.flag = flag;
         } else {
             TTEntry entry(alpha, depth, best_move, flag);
-            tt[search.pos.get_hash()] = entry;
+            tt->insert({search.pos.get_hash(), entry});
         }
     }
 
@@ -196,7 +211,7 @@ int Finder::quiesce(int alpha, int beta, int depth) {
 
     Move hash_move;
     TT::const_iterator entry_it;
-    if ((entry_it = tt.find(search.pos.get_hash())) != tt.end()) {
+    if ((entry_it = tt->find(search.pos.get_hash())) != tt->end()) {
         hash_move = entry_it->second.best_move;
     }
 
@@ -284,17 +299,17 @@ int Finder::quiesce(int alpha, int beta, int depth) {
 }
 
 template <Color C>
-void Finder::add_killer_move(Move move, int depth) {
-    killer_moves[C][depth][2] = killer_moves[C][depth][1];
-    killer_moves[C][depth][1] = killer_moves[C][depth][0];
-    killer_moves[C][depth][0] = move;
+void Finder::add_killer_move(Move move, int ply) {
+    killer_moves[C][ply][2] = killer_moves[C][ply][1];
+    killer_moves[C][ply][1] = killer_moves[C][ply][0];
+    killer_moves[C][ply][0] = move;
 }
 
 template <Color C>
-bool Finder::is_killer_move(Move move, int depth) const {
+bool Finder::is_killer_move(Move move, int ply) const {
     bool ret = false;
     for (unsigned char i = 0; i < 3; i++) {
-        if (move == killer_moves[C][depth][i]) {
+        if (move == killer_moves[C][ply][i]) {
             ret = true;
             break;
         }
@@ -317,12 +332,12 @@ void Finder::update_history_score(Move move, int depth) {
     }
 }
 
-std::vector<Move> get_pv(Position pos, const TT& tt) {
+std::vector<Move> get_pv(Position pos, const TT* tt) {
     std::vector<Move> ret;
 
     for (Color side_to_move = pos.turn(); pos.game_ply < NHISTORY; side_to_move = ~side_to_move) {
         TT::const_iterator entry_it;
-        if ((entry_it = tt.find(pos.get_hash())) != tt.end()) {
+        if ((entry_it = tt->find(pos.get_hash())) != tt->end()) {
             if (entry_it->second.best_move.is_null()) {
                 break;
             } else {
@@ -343,5 +358,5 @@ template int Finder::alpha_beta<BLACK>(int alpha, int beta, int depth);
 template int Finder::quiesce<WHITE>(int alpha, int beta, int depth);
 template int Finder::quiesce<BLACK>(int alpha, int beta, int depth);
 
-template void Finder::add_killer_move<WHITE>(Move move, int depth);
-template bool Finder::is_killer_move<WHITE>(Move move, int depth) const;
+template void Finder::add_killer_move<WHITE>(Move move, int ply);
+template bool Finder::is_killer_move<WHITE>(Move move, int ply) const;

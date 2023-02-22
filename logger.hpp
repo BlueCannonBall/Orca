@@ -1,11 +1,11 @@
 #ifndef _LOGGER_HPP
 #define _LOGGER_HPP
 
+#include <boost/thread.hpp>
 #include <cerrno>
 #include <cstring>
 #include <ctime>
 #include <fstream>
-#include <mutex>
 #include <ostream>
 #include <regex>
 #include <string>
@@ -74,7 +74,7 @@ inline LogLevel& operator^=(LogLevel& lhs, LogLevel rhs) {
 
 class Logger {
 private:
-    std::mutex mtx;
+    boost::mutex mtx;
 
     static std::string filter(const std::string& str) {
         const static std::regex ansi_escape_code_re(R"(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))", std::regex_constants::optimize);
@@ -92,7 +92,7 @@ private:
         char timef[TIMEBUF_SIZE];
         strftime(timef, TIMEBUF_SIZE, "%c", timeinfo);
 
-        std::unique_lock<std::mutex> lock(this->mtx);
+        boost::unique_lock<boost::mutex> lock(this->mtx);
 
         std::ofstream logfile(this->logfile_name, std::ios::app);
         if (logfile.is_open()) {
