@@ -3,9 +3,7 @@
         "codespaces": {
             "repositories": {
                 "BlueCannonBall/surge": {
-                    "permissions": {
-                        "issues": "write"
-                    }
+                    "permissions": "write-all"
                 }
             }
         }
