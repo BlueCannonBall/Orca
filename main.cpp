@@ -187,7 +187,7 @@ int main() {
         auto message = uci::poll();
 
         str_switch(message.command) {
-            str_case("uci") :
+            str_case("uci"):
             {
                 uci::send_message("id", {"name", "Orca"});
                 uci::send_message("id", {"author", "BlueCannonBall"});
@@ -195,19 +195,19 @@ int main() {
                 break;
             }
 
-            str_case("isready") :
+            str_case("isready"):
             {
                 uci::send_message("readyok");
                 break;
             }
 
-            str_case("ucinewgame") :
+            str_case("ucinewgame"):
             {
                 new_game = true;
                 break;
             }
 
-            str_case("position") :
+            str_case("position"):
             {
                 rt.clear();
                 if (message.args[0] == "startpos") {
@@ -259,7 +259,7 @@ int main() {
                 break;
             }
 
-            str_case("go") :
+            str_case("go"):
             {
                 using namespace std::chrono_literals;
 
@@ -274,38 +274,38 @@ int main() {
                 int depth = -1;
                 for (auto it = message.args.begin(); it != message.args.end(); it++) {
                     str_switch(*it) {
-                        str_case("movetime") :
+                        str_case("movetime"):
                         {
                             movetime = std::chrono::milliseconds(stoi(*++it));
                             break;
                         }
-                        str_case("wtime") :
+                        str_case("wtime"):
                         {
                             wtime = std::chrono::milliseconds(stoi(*++it));
                             break;
                         }
-                        str_case("btime") :
+                        str_case("btime"):
                         {
                             btime = std::chrono::milliseconds(stoi(*++it));
                             break;
                         }
-                        str_case("winc") :
+                        str_case("winc"):
                         {
                             winc = std::chrono::milliseconds(stoi(*++it));
                             break;
                         }
-                        str_case("binc") :
+                        str_case("binc"):
                         {
                             binc = std::chrono::milliseconds(stoi(*++it));
                             break;
                         }
-                        str_case("infinite") :
-                            str_case("ponder") :
+                        str_case("infinite"):
+                            str_case("ponder"):
                         {
                             infinite = true;
                             break;
                         }
-                        str_case("depth") :
+                        str_case("depth"):
                         {
                             depth = stoi(*++it);
                             break;
@@ -360,14 +360,14 @@ int main() {
                 break;
             }
 
-            str_case("stop") :
-                str_case("ponderhit") :
+            str_case("stop"):
+                str_case("ponderhit"):
             {
                 stop.store(true, boost::memory_order_relaxed);
                 break;
             }
 
-            str_case("quit") :
+            str_case("quit"):
             {
                 stop.store(true, boost::memory_order_relaxed);
                 channel.push(Search {
@@ -377,14 +377,14 @@ int main() {
                 return 0;
             }
 
-            str_case("show") :
+            str_case("show"):
             {
                 std::cout << pos << std::endl;
                 break;
             }
 
-            str_case("eval") :
-                str_case("evaluate") :
+            str_case("eval"):
+                str_case("evaluate"):
             {
                 if (pos.turn() == WHITE) {
                     uci::send_message("evaluation", {std::to_string(evaluate<WHITE>(pos, true))});

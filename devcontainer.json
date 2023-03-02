@@ -1,0 +1,13 @@
+{
+    "customizations": {
+        "codespaces": {
+            "repositories": {
+                "BlueCannonBall/surge": {
+                    "permissions": {
+                        "issues": "write"
+                    }
+                }
+            }
+        }
+    }
+}

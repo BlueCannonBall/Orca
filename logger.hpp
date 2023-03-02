@@ -107,9 +107,9 @@ public:
     std::string logfile_name;
     LogLevel log_level;
 
-    Logger(const std::string& logfile_name, LogLevel log_level = LogLevel::Error | LogLevel::Warning | LogLevel::Info | LogLevel::Debug) :
+    Logger(const std::string& logfile_name, LogLevel log_level = LogLevel::Error | LogLevel::Warning | LogLevel::Info | LogLevel::Debug):
         logfile_name(logfile_name),
-        log_level(log_level) { }
+        log_level(log_level) {}
 
     inline void error(const std::string& message, bool filter_message = true) {
         if (static_cast<bool>(log_level & LogLevel::Error)) {

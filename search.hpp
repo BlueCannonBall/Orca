@@ -24,11 +24,11 @@ public:
     TTEntryFlag flag;
 
     TTEntry() = default;
-    TTEntry(int score, int depth, Move best_move, TTEntryFlag flag) :
+    TTEntry(int score, int depth, Move best_move, TTEntryFlag flag):
         score(score),
         depth(depth),
         best_move(best_move),
-        flag(flag) { }
+        flag(flag) {}
 };
 
 typedef std::unordered_map<uint64_t, TTEntry> TT;
@@ -55,7 +55,7 @@ public:
     KillerMoves killer_moves;
     int history_scores[NSQUARES][NSQUARES];
 
-    Finder(std::chrono::steady_clock::time_point start_time, const Search& search, const boost::atomic<bool>& stop) :
+    Finder(std::chrono::steady_clock::time_point start_time, const Search& search, const boost::atomic<bool>& stop):
         start_time(start_time),
         search(search),
         stop(stop),
