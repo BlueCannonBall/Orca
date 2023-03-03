@@ -5,6 +5,7 @@ HEADERS = $(shell find . -name "*.h" -o -name "*.hpp")
 OBJDIR = obj
 OBJS = $(OBJDIR)/main.o $(OBJDIR)/position.o $(OBJDIR)/tables.o $(OBJDIR)/types.o $(OBJDIR)/util.o $(OBJDIR)/evaluation.o $(OBJDIR)/search.o
 TARGET = orca
+PREFIX = /usr/local
 
 $(TARGET): $(OBJS)
 	$(CXX) $^ $(CXXFLAGS) $(LIBS) -o $@
@@ -37,7 +38,10 @@ $(OBJDIR)/search.o: search.cpp $(HEADERS)
 	mkdir -p $(OBJDIR)
 	$(CXX) -c $< $(CXXFLAGS) -o $@
 
-.PHONY: clean
+.PHONY: clean install
 
 clean:
 	rm -rf $(TARGET) $(OBJDIR)
+
+install:
+	cp $(TARGET) $(PREFIX)/bin/
