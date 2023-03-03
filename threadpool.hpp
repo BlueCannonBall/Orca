@@ -82,11 +82,13 @@ namespace tp {
                 lock.unlock();
 
                 switch (command->type) {
-                    default: {
+                default:
+                    {
                         throw std::runtime_error("Invalid command type");
                     }
 
-                    case CommandType::Execute: {
+                case CommandType::Execute:
+                    {
                         auto cmd = (CommandExecute*) command.get();
                         try {
                             cmd->func(cmd->arg);
@@ -103,7 +105,8 @@ namespace tp {
                         break;
                     }
 
-                    case CommandType::Quit: {
+                case CommandType::Quit:
+                    {
                         return;
                     }
                 }

@@ -105,20 +105,20 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
 
         if (move->is_promotion()) {
             switch (move->promotion()) {
-                case KNIGHT:
-                    sort_scores[move->from()][move->to()] += 5000;
-                    break;
-                case BISHOP:
-                    sort_scores[move->from()][move->to()] += 6000;
-                    break;
-                case ROOK:
-                    sort_scores[move->from()][move->to()] += 7000;
-                    break;
-                case QUEEN:
-                    sort_scores[move->from()][move->to()] += 8000;
-                    break;
-                default:
-                    throw std::logic_error("Invalid promotion");
+            case KNIGHT:
+                sort_scores[move->from()][move->to()] += 5000;
+                break;
+            case BISHOP:
+                sort_scores[move->from()][move->to()] += 6000;
+                break;
+            case ROOK:
+                sort_scores[move->from()][move->to()] += 7000;
+                break;
+            case QUEEN:
+                sort_scores[move->from()][move->to()] += 8000;
+                break;
+            default:
+                throw std::logic_error("Invalid promotion");
             }
         }
     }
@@ -248,20 +248,20 @@ int Finder::quiesce(int alpha, int beta, int depth) {
 
         if (move->is_promotion()) {
             switch (move->promotion()) {
-                case KNIGHT:
-                    sort_scores[move->from()][move->to()] += 5000;
-                    break;
-                case BISHOP:
-                    sort_scores[move->from()][move->to()] += 6000;
-                    break;
-                case ROOK:
-                    sort_scores[move->from()][move->to()] += 7000;
-                    break;
-                case QUEEN:
-                    sort_scores[move->from()][move->to()] += 8000;
-                    break;
-                default:
-                    throw std::logic_error("Invalid promotion");
+            case KNIGHT:
+                sort_scores[move->from()][move->to()] += 5000;
+                break;
+            case BISHOP:
+                sort_scores[move->from()][move->to()] += 6000;
+                break;
+            case ROOK:
+                sort_scores[move->from()][move->to()] += 7000;
+                break;
+            case QUEEN:
+                sort_scores[move->from()][move->to()] += 8000;
+                break;
+            default:
+                throw std::logic_error("Invalid promotion");
             }
         }
     }

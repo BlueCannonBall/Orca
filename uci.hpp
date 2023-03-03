@@ -27,21 +27,21 @@ namespace uci {
         ss << SQSTR[move.from()] << SQSTR[move.to()];
         if (move.is_promotion()) {
             switch (move.promotion()) {
-                case KNIGHT:
-                    ss << 'n';
-                    break;
-                case BISHOP:
-                    ss << 'b';
-                    break;
-                case ROOK:
-                    ss << 'r';
-                    break;
-                case QUEEN:
-                    ss << 'q';
-                    break;
+            case KNIGHT:
+                ss << 'n';
+                break;
+            case BISHOP:
+                ss << 'b';
+                break;
+            case ROOK:
+                ss << 'r';
+                break;
+            case QUEEN:
+                ss << 'q';
+                break;
 
-                default:
-                    throw std::logic_error("Invalid promotion");
+            default:
+                throw std::logic_error("Invalid promotion");
             }
         }
         return ss.str();
@@ -54,33 +54,33 @@ namespace uci {
         MoveFlags flags = generate_move_flags<C>(pos, from, to);
         if (flags == PROMOTIONS) {
             switch (str[4]) {
-                case 'n':
-                    flags = PR_KNIGHT;
-                    break;
-                case 'b':
-                    flags = PR_BISHOP;
-                    break;
-                case 'r':
-                    flags = PR_ROOK;
-                    break;
-                case 'q':
-                    flags = PR_QUEEN;
-                    break;
+            case 'n':
+                flags = PR_KNIGHT;
+                break;
+            case 'b':
+                flags = PR_BISHOP;
+                break;
+            case 'r':
+                flags = PR_ROOK;
+                break;
+            case 'q':
+                flags = PR_QUEEN;
+                break;
             }
         } else if (flags == PROMOTION_CAPTURES) {
             switch (str[4]) {
-                case 'n':
-                    flags = PC_KNIGHT;
-                    break;
-                case 'b':
-                    flags = PC_BISHOP;
-                    break;
-                case 'r':
-                    flags = PC_ROOK;
-                    break;
-                case 'q':
-                    flags = PC_QUEEN;
-                    break;
+            case 'n':
+                flags = PC_KNIGHT;
+                break;
+            case 'b':
+                flags = PC_BISHOP;
+                break;
+            case 'r':
+                flags = PC_ROOK;
+                break;
+            case 'q':
+                flags = PC_QUEEN;
+                break;
             }
         }
         return Move(from, to, flags);
