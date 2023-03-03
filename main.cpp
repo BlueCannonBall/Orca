@@ -61,7 +61,6 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                 tasks.push_back(pool.schedule([&tts, us, depth, &mtx, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
-                    finder->nodes = 0;
                     finder->tt = &tts[boost::this_thread::get_id()];
 
                     int score;
