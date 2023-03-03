@@ -46,6 +46,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
 
         Move best_move;
         Move ponder_move;
+        unsigned long long nodes = 0;
         int max_game_ply = search.target_depth == -1 ? NHISTORY : (search.pos.game_ply + search.target_depth);
 
         for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply; depth++) {
@@ -61,6 +62,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                 tasks.push_back(pool.schedule([&tts, us, depth, &mtx, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
+                    finder->nodes = 0;
                     finder->tt = &tts[boost::this_thread::get_id()];
 
                     int score;
@@ -118,7 +120,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
 
             if (!is_stopping(depth)) {
                 best_move = current_best_move;
-                unsigned long long nodes = last_move - moves;
+                nodes += last_move - moves;
                 for (const auto& finder : finders) {
                     nodes += finder.nodes;
                 }
