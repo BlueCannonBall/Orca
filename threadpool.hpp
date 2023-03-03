@@ -82,33 +82,30 @@ namespace tp {
                 lock.unlock();
 
                 switch (command->type) {
-                default:
-                    {
-                        throw std::runtime_error("Invalid command type");
+                default: {
+                    throw std::runtime_error("Invalid command type");
+                }
+
+                case CommandType::Execute: {
+                    auto cmd = (CommandExecute*) command.get();
+                    try {
+                        cmd->func(cmd->arg);
+
+                        boost::unique_lock<boost::mutex> lock(cmd->mutex);
+                        cmd->status = CommandStatus::Success;
+                    } catch (const std::exception& e) {
+                        boost::unique_lock<boost::mutex> lock(cmd->mutex);
+                        cmd->status = CommandStatus::Failure;
+                        cmd->error = e;
                     }
 
-                case CommandType::Execute:
-                    {
-                        auto cmd = (CommandExecute*) command.get();
-                        try {
-                            cmd->func(cmd->arg);
+                    cmd->condition.notify_all();
+                    break;
+                }
 
-                            boost::unique_lock<boost::mutex> lock(cmd->mutex);
-                            cmd->status = CommandStatus::Success;
-                        } catch (const std::exception& e) {
-                            boost::unique_lock<boost::mutex> lock(cmd->mutex);
-                            cmd->status = CommandStatus::Failure;
-                            cmd->error = e;
-                        }
-
-                        cmd->condition.notify_all();
-                        break;
-                    }
-
-                case CommandType::Quit:
-                    {
-                        return;
-                    }
+                case CommandType::Quit: {
+                    return;
+                }
                 }
             }
         }
