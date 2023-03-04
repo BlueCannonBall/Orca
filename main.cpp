@@ -317,11 +317,12 @@ int main() {
                 if (infinite || depth != -1) {
                     search_time = 10h;
                 } else {
+                    float moves_made = std::floor(pos.game_ply / 2.f);
                     int moves_left;
-                    if ((float) pos.game_ply / 2.f < 60.f) {
-                        moves_left = std::round(((-2.f / 3.f) * ((float) pos.game_ply / 2.f)) + 50.f);
+                    if (moves_made < 60.f) {
+                        moves_left = std::round(((-2.f / 3.f) * moves_made) + 50.f);
                     } else if ((float) pos.game_ply / 2.f >= 60.f) {
-                        moves_left = std::round((0.1f * ((float) pos.game_ply / 2.f - 60.f)) + 10.f);
+                        moves_left = std::round((0.1f * (moves_made - 60.f)) + 10.f);
                     }
 
                     if (pos.turn() == WHITE) {
