@@ -78,7 +78,7 @@ private:
 
     static std::string filter(const std::string& str) {
         const static std::regex ansi_escape_code_re(R"(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))", std::regex_constants::optimize);
-        return std::regex_replace(str, ansi_escape_code_re, std::string());
+        return std::regex_replace(str, ansi_escape_code_re, {});
     }
 
     void log(std::string message, bool filter_message = true) {
