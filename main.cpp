@@ -318,7 +318,7 @@ int main() {
                     search_time = 10h;
                 } else {
                     float moves_made = std::floor(pos.game_ply / 2.f);
-                    int moves_left;
+                    int moves_left = 40;
                     if (moves_made < 60.f) {
                         moves_left = std::round(-0.5f * moves_made + 40.f);
                     } else if ((float) pos.game_ply / 2.f >= 60.f) {
