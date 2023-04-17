@@ -34,3 +34,4 @@
 # Custom
 obj/
 orca
+compile_commands.json
