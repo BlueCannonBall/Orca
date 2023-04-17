@@ -7,6 +7,7 @@
 #include "uci.hpp"
 #include <boost/atomic.hpp>
 #include <chrono>
+#include <prophet.h>
 #include <unordered_map>
 #include <vector>
 
@@ -62,6 +63,25 @@ public:
         starting_ply(search.pos.game_ply) {
         memset(this->killer_moves, 0, sizeof(this->killer_moves));
         memset(this->history_scores, 0, sizeof(this->history_scores));
+    }
+
+    ~Finder() {
+        if (search.pos.data) {
+            prophet_die_for_sins((Prophet*) search.pos.data);
+        }
+    }
+
+    void raise_prophet() {
+        this->search.pos.data = ::raise_prophet(nullptr);
+        prophet_activate_all((Prophet*) this->search.pos.data, generate_prophet_board(this->search.pos));
+        this->search.pos.activate_piece_hook = [](Piece piece, Square sq, void* data) {
+            auto prophet = (Prophet*) data;
+            prophet_activate(prophet, type_of(piece), color_of(piece), sq);
+        };
+        this->search.pos.deactivate_piece_hook = [](Piece piece, Square sq, void* data) {
+            auto prophet = (Prophet*) data;
+            prophet_deactivate(prophet, type_of(piece), color_of(piece), sq);
+        };
     }
 
     template <Color Us>

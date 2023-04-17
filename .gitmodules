@@ -1,3 +1,6 @@
 [submodule "surge"]
 	path = surge
 	url = https://github.com/BlueCannonBall/surge.git
+[submodule "prophet-nnue"]
+	path = prophet-nnue
+	url = https://github.com/UE2020/prophet-nnue.git

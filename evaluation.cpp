@@ -6,6 +6,16 @@
 #include <iostream>
 
 template <Color Us>
+int evaluate_basic(const Position& pos) {
+    int ret = 0;
+    for (PieceType i = PAWN; i < NPIECE_TYPES - 1; ++i) {
+        ret += pop_count(pos.bitboard_of(Us, i)) * piece_values[i];
+        ret -= pop_count(pos.bitboard_of(~Us, i)) * piece_values[i];
+    }
+    return ret;
+}
+
+template <Color Us>
 int evaluate(const Position& pos, bool debug) {
     // Material value
     int mv = 0;
@@ -335,6 +345,9 @@ int mvv_lva(const Position& pos, Move move) {
         return scores[type_of(pos.at(move.to())) * NPIECE_TYPES + type_of(pos.at(move.from()))];
     }
 }
+
+template int evaluate_basic<WHITE>(const Position& pos);
+template int evaluate_basic<BLACK>(const Position& pos);
 
 template int evaluate<WHITE>(const Position& pos, bool debug);
 template int evaluate<BLACK>(const Position& pos, bool debug);

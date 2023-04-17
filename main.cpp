@@ -40,6 +40,10 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
         std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
         std::vector<Finder> finders(last_move - moves, Finder(start_time, search, stop));
 
+        for (Finder& finder : finders) {
+            finder.raise_prophet();
+        }
+
         const auto is_stopping = [start_time, &search, &stop](int depth) {
             return depth > 1 && (std::chrono::steady_clock::now() - start_time > search.time || stop.load(boost::memory_order_relaxed));
         };
@@ -173,7 +177,7 @@ int main() {
     logger.info("Engine started");
 
 #if defined(ORCA_TIMESTAMP) && defined(ORCA_COMPILER)
-    std::cout << "Orca HCE compiled @ " << ORCA_TIMESTAMP << " on compiler " << ORCA_COMPILER << std::endl;
+    std::cout << "Orca NNUE (double-accumulator 1x768 feature space i16 quantized eval with 256x scaling factor) compiled @ " << ORCA_TIMESTAMP << " on compiler " << ORCA_COMPILER << std::endl;
 #endif
 
     Position pos(DEFAULT_FEN);

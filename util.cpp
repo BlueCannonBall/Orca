@@ -94,3 +94,17 @@ MoveFlags generate_attack_move_flags<BLACK>(const Position& pos, Square from, Sq
     }
     return QUIET;
 }
+
+ProphetBoard generate_prophet_board(const Position& pos) {
+    ProphetBoard ret;
+    ret.white = pos.all_pieces<WHITE>();
+    ret.black = pos.all_pieces<BLACK>();
+    ret.pawns = pos.bitboard_of(WHITE_PAWN) | pos.bitboard_of(BLACK_PAWN);
+    ret.knights = pos.bitboard_of(WHITE_KNIGHT) | pos.bitboard_of(BLACK_KNIGHT);
+    ret.bishops = pos.bitboard_of(WHITE_BISHOP) | pos.bitboard_of(BLACK_BISHOP);
+    ret.rooks = pos.bitboard_of(WHITE_ROOK) | pos.bitboard_of(BLACK_ROOK);
+    ret.queens = pos.bitboard_of(WHITE_QUEEN) | pos.bitboard_of(BLACK_QUEEN);
+    ret.kings = pos.bitboard_of(WHITE_KING) | pos.bitboard_of(BLACK_KING);
+    ret.side_to_move = pos.turn();
+    return ret;
+}
