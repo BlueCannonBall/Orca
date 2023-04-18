@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -Wall -std=c++14 -Iprophet-nnue/include -static -Ofast -flto -march=native -mtune=native -pthread
+CXXFLAGS = -Wall -std=c++14 -Iprophet-nnue/nnue/include -static -Ofast -flto -march=native -mtune=native -pthread
 RUSTFLAGS = -C target-cpu=native
 LDFLAGS = -Lprophet-nnue/target/release
 LDLIBS = -lboost_context -lboost_fiber -lboost_thread -lprophet -ldl
