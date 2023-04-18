@@ -16,6 +16,9 @@ template <Color Us>
 int evaluate_basic(const Position& pos);
 
 template <Color Us>
+int evaluate_nnue(const Position& pos, bool debug = false);
+
+template <Color Us>
 int evaluate(const Position& pos, bool debug = false);
 
 template <Color Us>

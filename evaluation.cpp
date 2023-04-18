@@ -16,6 +16,18 @@ int evaluate_basic(const Position& pos) {
 }
 
 template <Color Us>
+int evaluate_nnue(const Position& pos, bool debug) {
+    int evaluation;
+    int basic_evaluation;
+    if (std::abs(basic_evaluation = evaluate_basic<Us>(pos)) < 100) {
+        evaluation = basic_evaluation + prophet_get_residue((Prophet*) pos.data, Us);
+    } else {
+        evaluation = evaluate<Us>(pos);
+    }
+    return evaluation;
+}
+
+template <Color Us>
 int evaluate(const Position& pos, bool debug) {
     // Material value
     int mv = 0;
@@ -348,6 +360,9 @@ int mvv_lva(const Position& pos, Move move) {
 
 template int evaluate_basic<WHITE>(const Position& pos);
 template int evaluate_basic<BLACK>(const Position& pos);
+
+template int evaluate_nnue<WHITE>(const Position& pos, bool debug);
+template int evaluate_nnue<BLACK>(const Position& pos, bool debug);
 
 template int evaluate<WHITE>(const Position& pos, bool debug);
 template int evaluate<BLACK>(const Position& pos, bool debug);

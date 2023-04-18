@@ -56,17 +56,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
     bool is_pv = alpha != beta - 1;
 
     // Reverse futility pruning
-    int evaluation;
-    if (search.pos.data) {
-        int basic_evaluation;
-        if (std::abs(basic_evaluation = evaluate_basic<Us>(search.pos)) < 100) {
-            evaluation = basic_evaluation + prophet_get_residue((Prophet*) search.pos.data, Us);
-        } else {
-            evaluation = evaluate<Us>(search.pos);
-        }
-    } else {
-        evaluation = evaluate<Us>(search.pos);
-    }
+    int evaluation = evaluate_nnue<Us>(search.pos);
     if (!is_pv && !in_check && depth <= 8) {
         if (evaluation - (120 * depth) >= beta) {
             return evaluation;
@@ -212,17 +202,7 @@ int Finder::quiesce(int alpha, int beta, int depth) {
 
     nodes++;
 
-    int evaluation;
-    if (search.pos.data) {
-        int basic_evaluation;
-        if (std::abs(basic_evaluation = evaluate_basic<Us>(search.pos)) < 100) {
-            evaluation = basic_evaluation + prophet_get_residue((Prophet*) search.pos.data, Us);
-        } else {
-            evaluation = evaluate<Us>(search.pos);
-        }
-    } else {
-        evaluation = evaluate<Us>(search.pos);
-    }
+    int evaluation = evaluate_nnue<Us>(search.pos);
     if (evaluation >= beta) {
         return beta;
     } else if (alpha < evaluation) {
