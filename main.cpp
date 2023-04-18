@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cmath>
 #include <map>
+#include <prophet.h>
 #include <string>
 #include <vector>
 
@@ -73,7 +74,8 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                     int static_evaluation;
                     RT::const_iterator entry_it;
                     DYN_COLOR_CALL(finder->search.pos.play, us, move);
-                    static_evaluation = DYN_COLOR_CALL(evaluate, us, finder->search.pos);
+                    ProphetBoard prophet_board = generate_prophet_board(finder->search.pos);
+                    static_evaluation = prophet_sing_evaluation((Prophet*) finder->search.pos.data, &prophet_board);
                     if ((entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && entry_it->second + 1 == 3) {
                         score = 0;
                     } else {
