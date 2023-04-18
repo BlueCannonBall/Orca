@@ -65,15 +65,13 @@ public:
         memset(this->history_scores, 0, sizeof(this->history_scores));
     }
 
-    ~Finder() {
-        if (search.pos.data) {
-            prophet_die_for_sins((Prophet*) search.pos.data);
-        }
+    inline void raise_prophet(const char* net_path = nullptr) {
+        accept_prophet(::raise_prophet(net_path));
     }
 
-    void raise_prophet() {
-        this->search.pos.data = ::raise_prophet(nullptr);
-        prophet_activate_all((Prophet*) this->search.pos.data, generate_prophet_board(this->search.pos));
+    void accept_prophet(Prophet* prophet) {
+        this->search.pos.data = prophet;
+        prophet_activate_all(prophet, generate_prophet_board(this->search.pos));
         this->search.pos.activate_piece_hook = [](Piece piece, Square sq, void* data) {
             auto prophet = (Prophet*) data;
             prophet_activate(prophet, type_of(piece), color_of(piece), sq);

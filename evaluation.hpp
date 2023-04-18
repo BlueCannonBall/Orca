@@ -15,6 +15,8 @@ constexpr int piece_values[NPIECE_TYPES] = {
 template <Color Us>
 int evaluate_basic(const Position& pos);
 
+int evaluate_nn(const Position& pos);
+
 template <Color Us>
 int evaluate_nnue(const Position& pos, bool debug = false);
 

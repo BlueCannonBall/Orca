@@ -18,7 +18,9 @@
 
 void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bool>& stop) {
     tp::ThreadPool pool;
+    boost::mutex mtx;
     std::map<boost::thread::id, TT> tts;
+    std::map<boost::thread::id, Prophet*> prophets;
     Search search;
     while (channel.pop(search) == boost::fibers::channel_op_status::success) {
         if (search.new_game) {
@@ -41,9 +43,9 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
         std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
         std::vector<Finder> finders(last_move - moves, Finder(start_time, search, stop));
 
-        for (Finder& finder : finders) {
-            finder.raise_prophet();
-        }
+        // for (Finder& finder : finders) {
+        //     finder.raise_prophet();
+        // }
 
         const auto is_stopping = [start_time, &search, &stop](int depth) {
             return depth > 1 && (std::chrono::steady_clock::now() - start_time > search.time || stop.load(boost::memory_order_relaxed));
@@ -55,7 +57,6 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
         int max_game_ply = search.target_depth == -1 ? NHISTORY : (search.pos.game_ply + search.target_depth);
 
         for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply && depth <= 256; depth++) {
-            boost::mutex mtx;
             Move current_best_move;
             int current_best_move_score = INT_MIN;
             int current_best_move_static_evaluation = INT_MIN;
@@ -64,19 +65,29 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
 
             for (Move* move_ptr = moves; move_ptr != last_move; move_ptr++) {
                 Move move = *move_ptr;
-                tasks.push_back(pool.schedule([&tts, us, depth, &mtx, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
+                tasks.push_back(pool.schedule([&mtx, &tts, &prophets, us, depth, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
                     finder->nodes = 0;
                     finder->tt = &tts[boost::this_thread::get_id()];
+
+                    decltype(prophets)::iterator prophet_it;
+                    mtx.lock();
+                    if ((prophet_it = prophets.find(boost::this_thread::get_id())) != prophets.end()) {
+                        finder->accept_prophet(prophet_it->second);
+                    } else {
+                        Prophet* new_prophet = raise_prophet(nullptr);
+                        prophets[boost::this_thread::get_id()] = new_prophet;
+                        finder->accept_prophet(new_prophet);
+                    }
+                    mtx.unlock();
 
                     int score;
                     int static_evaluation;
                     RT::const_iterator entry_it;
                     DYN_COLOR_CALL(finder->search.pos.play, us, move);
                     if (finder->search.pos.data) {
-                        ProphetBoard prophet_board = generate_prophet_board(finder->search.pos);
-                        static_evaluation = prophet_sing_evaluation((Prophet*) finder->search.pos.data, &prophet_board);
+                        static_evaluation = evaluate_nn(finder->search.pos);
                     } else {
                         static_evaluation = DYN_COLOR_CALL(evaluate, us, finder->search.pos);
                     }

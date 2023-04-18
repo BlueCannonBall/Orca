@@ -15,6 +15,11 @@ int evaluate_basic(const Position& pos) {
     return ret;
 }
 
+int evaluate_nn(const Position& pos) {
+    ProphetBoard prophet_board = generate_prophet_board(pos);
+    return prophet_sing_evaluation((Prophet*) pos.data, &prophet_board);
+}
+
 template <Color Us>
 int evaluate_nnue(const Position& pos, bool debug) {
     int evaluation;
