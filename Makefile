@@ -15,8 +15,8 @@ $(OBJDIR)/main.o: main.cpp $(HEADERS)
 	mkdir -p $(OBJDIR)
 	$(CXX) -c $< $(CXXFLAGS) -DORCA_TIMESTAMP=\"$(shell date --iso=seconds)\" "-DORCA_COMPILER=\"$(CXX) $(shell $(CXX) -dumpversion)\"" -o $@
 
-prophet-nnue/target/release/libprophet.a: prophet-nnue/Cargo.toml $(shell find prophet-nnue/nnue/src -name "*.rs") prophet-nnue/nnue/nnue.npz
-	cd prophet-nnue && RUSTFLAGS="$(RUSTFLAGS)" cargo build --release
+prophet-nnue/target/release/libprophet.a: prophet-nnue/nnue/Cargo.toml $(shell find prophet-nnue/nnue/src -name "*.rs") prophet-nnue/nnue/nnue.npz
+	cd prophet-nnue/nnue && RUSTFLAGS="$(RUSTFLAGS)" cargo build --release
 
 $(OBJDIR)/position.o: surge/src/position.cpp surge/src/*.h
 	mkdir -p $(OBJDIR)

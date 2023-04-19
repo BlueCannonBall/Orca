@@ -71,6 +71,7 @@ public:
 
     void accept_prophet(Prophet* prophet) {
         this->search.pos.data = prophet;
+        prophet_reset(prophet);
         prophet_activate_all(prophet, generate_prophet_board(this->search.pos));
         this->search.pos.activate_piece_hook = [](Piece piece, Square sq, void* data) {
             auto prophet = (Prophet*) data;
