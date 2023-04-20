@@ -49,7 +49,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
         unsigned long long nodes = 0;
         int max_game_ply = search.target_depth == -1 ? NHISTORY : (search.pos.game_ply + search.target_depth);
 
-        for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply; depth++) {
+        for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply && depth <= 256; depth++) {
             boost::mutex mtx;
             Move current_best_move;
             int current_best_move_score = INT_MIN;
