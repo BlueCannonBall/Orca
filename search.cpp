@@ -53,16 +53,6 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
         return quiesce<Us>(alpha, beta, depth - 1);
     }
 
-    bool is_pv = alpha != beta - 1;
-
-    // Reverse futility pruning
-    int evaluation = evaluate_nnue<Us>(search.pos);
-    if (!is_pv && !in_check && depth <= 8) {
-        if (evaluation - (120 * depth) >= beta) {
-            return evaluation;
-        }
-    }
-
     Move moves[218];
     Move* last_move = search.pos.generate_legals<Us>(moves);
 
