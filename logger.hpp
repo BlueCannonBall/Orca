@@ -77,11 +77,11 @@ private:
     boost::mutex mtx;
 
     static std::string filter(const std::string& str) {
-        const static std::regex ansi_escape_code_re(R"(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))", std::regex_constants::optimize);
+        const static std::regex ansi_escape_code_re(R"(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))");
         return std::regex_replace(str, ansi_escape_code_re, {});
     }
 
-    void log(std::string message, bool filter_message = true) {
+    void log(std::string message, bool filter_message = false) {
         if (filter_message) message = filter(message);
 
         time_t rawtime;
@@ -111,25 +111,25 @@ public:
         logfile_name(logfile_name),
         log_level(log_level) {}
 
-    inline void error(const std::string& message, bool filter_message = true) {
+    inline void error(const std::string& message, bool filter_message = false) {
         if (static_cast<bool>(log_level & LogLevel::Error)) {
             log("Error: " + message, filter_message);
         }
     }
 
-    inline void warn(const std::string& message, bool filter_message = true) {
+    inline void warn(const std::string& message, bool filter_message = false) {
         if (static_cast<bool>(log_level & LogLevel::Warning)) {
             log("Warning: " + message, filter_message);
         }
     }
 
-    inline void info(const std::string& message, bool filter_message = true) {
+    inline void info(const std::string& message, bool filter_message = false) {
         if (static_cast<bool>(log_level & LogLevel::Info)) {
             log("Info: " + message, filter_message);
         }
     }
 
-    inline void debug(const std::string& message, bool filter_message = true) {
+    inline void debug(const std::string& message, bool filter_message = false) {
         if (static_cast<bool>(log_level & LogLevel::Debug)) {
             log("Debug: " + message, filter_message);
         }

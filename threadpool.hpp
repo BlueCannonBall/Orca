@@ -114,7 +114,7 @@ namespace tp {
         unsigned int sched_counter = 0;
 
     public:
-        ThreadPool(unsigned int pool_size = boost::thread::hardware_concurrency()) {
+        ThreadPool(unsigned int pool_size = boost::thread::physical_concurrency()) {
             for (unsigned int i = 0; i < pool_size; i++) {
                 auto new_queue = new CommandQueue;
                 boost::thread new_thread(&ThreadPool::runner, this, new_queue);

@@ -1,5 +1,6 @@
 #include "search.hpp"
 #include "evaluation.hpp"
+#include "prophet.h"
 #include "surge/src/types.h"
 #include "util.hpp"
 #include <algorithm>
@@ -56,7 +57,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
     bool is_pv = alpha != beta - 1;
 
     // Reverse futility pruning
-    int evaluation = evaluate<Us>(search.pos);
+    int evaluation = evaluate_nnue<Us>(search.pos);
     if (!is_pv && !in_check && depth <= 8) {
         if (evaluation - (120 * depth) >= beta) {
             return evaluation;
@@ -203,6 +204,7 @@ int Finder::quiesce(int alpha, int beta, int depth) {
     nodes++;
 
     int evaluation = evaluate_nnue<Us>(search.pos);
+
     if (evaluation >= beta) {
         return beta;
     } else if (alpha < evaluation) {
