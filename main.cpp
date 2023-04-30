@@ -285,6 +285,7 @@ int main() {
                 std::chrono::milliseconds winc = 0ms;
                 std::chrono::milliseconds binc = 0ms;
                 bool infinite = false;
+                bool ponder = false;
                 int depth = -1;
                 for (auto it = message.args.begin(); it != message.args.end(); it++) {
                     str_switch(*it) {
@@ -314,9 +315,13 @@ int main() {
                             break;
                         }
                         str_case("infinite"):
-                            str_case("ponder"):
                         {
                             infinite = true;
+                            break;
+                        }
+                        str_case("ponder"):
+                        {
+                            ponder = true;
                             break;
                         }
                         str_case("depth"):
@@ -361,6 +366,8 @@ int main() {
                     } else {
                         throw std::logic_error("Invalid side to move");
                     }
+
+                    if (ponder) search_time *= 2;
                 }
 
                 channel.push(Search {
