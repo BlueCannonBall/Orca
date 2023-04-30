@@ -383,7 +383,6 @@ int main() {
             }
 
             str_case("stop"):
-                str_case("ponderhit"):
             {
                 stop.store(true, boost::memory_order_relaxed);
                 break;
