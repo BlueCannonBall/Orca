@@ -186,7 +186,7 @@ int main() {
     logger.info("Engine started");
 
 #if defined(ORCA_TIMESTAMP) && defined(ORCA_COMPILER)
-    std::cout << "Orca NNUE (double-accumulator 1x768 feature space i16 quantized eval with 256x scaling factor) compiled @ " << ORCA_TIMESTAMP << " on compiler " << ORCA_COMPILER << std::endl;
+    std::cout << "Orca NNUE (mono-accumulator 1x768 feature space i16 quantized eval with 64x scaling factor) compiled @ " << ORCA_TIMESTAMP << " on compiler " << ORCA_COMPILER << std::endl;
 #endif
 
     Position pos(DEFAULT_FEN);
