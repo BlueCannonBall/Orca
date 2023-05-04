@@ -4,14 +4,13 @@
 #include "parallel_hashmap/phmap.h"
 #include "surge/src/position.h"
 #include "surge/src/types.h"
-#include "util.hpp"
 #include "threadpool.hpp"
-#include <functional>
-#include <utility>
+#include "util.hpp"
 #include <boost/atomic.hpp>
 #include <boost/thread/mutex.hpp>
 #include <chrono>
 #include <prophet.h>
+#include <utility>
 #include <vector>
 
 enum TTEntryFlag {
@@ -58,7 +57,6 @@ public:
     const boost::atomic<bool>& stop;
     KillerMoves killer_moves;
     int history_scores[NSQUARES][NSQUARES];
-    int last_score;
 
     Finder(std::chrono::steady_clock::time_point start_time, const Search& search, TT& tt, const boost::atomic<bool>& stop):
         start_time(start_time),

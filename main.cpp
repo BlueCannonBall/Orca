@@ -100,28 +100,10 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                         if (repetition) {
                             score = 0;
                         } else {
-                            if (depth > 1) {
-                                int upper_window_size = 20;
-                                int lower_window_size = 20;
-                                for (;;) {
-                                    int alpha = finder->last_score - lower_window_size;
-                                    int beta = finder->last_score + upper_window_size;
-                                    score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, alpha, beta, depth - 1);
-                                    if (score <= alpha) {
-                                        lower_window_size *= 5;
-                                    } else if (score >= beta) {
-                                        upper_window_size *= 5;
-                                    } else {
-                                        break;
-                                    }
-                                }
-                            } else {
-                                score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, -piece_values[KING], piece_values[KING], depth - 1);
-                            }
+                            score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, -piece_values[KING], piece_values[KING], depth - 1);
                         }
                     }
                     DYN_COLOR_CALL(finder->search.pos.undo, us, move);
-                    finder->last_score = score;
 
                     if (!finder->is_stopping()) {
                         mtx.lock();
