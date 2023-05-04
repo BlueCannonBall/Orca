@@ -43,7 +43,6 @@ struct Search {
     RT rt;
     std::chrono::milliseconds time;
     int target_depth = -1;
-    bool new_game = false;
     bool quit = false;
 };
 
