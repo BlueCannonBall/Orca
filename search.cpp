@@ -23,10 +23,16 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
     }
 
     bool in_check = search.pos.in_check<Us>();
+    int evaluation = evaluate<Us>(search.pos);
 
     // Check extensions
     if (in_check) {
         depth++;
+    }
+
+    // Razoring
+    if (depth == 2 && evaluation + piece_values[ROOK] <= alpha) {
+        depth--;
     }
 
     Move hash_move;
@@ -58,7 +64,6 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
 
     // Reverse futility pruning
     if (!is_pv && !in_check && depth <= 8) {
-        int evaluation = evaluate<Us>(search.pos);
         if (evaluation - (120 * depth) >= beta) {
             return evaluation;
         }
@@ -67,7 +72,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
     // Null move pruning
     if (do_null_move && !is_pv && !in_check && depth > 4 && has_non_pawn_material<Us>(search.pos)) {
         search.pos.play<Us>(Move());
-        int score = -alpha_beta<~Us>(-beta, -beta + 1, depth - 2, false);
+        int score = -alpha_beta<~Us>(-beta, -beta + 1, depth - 3, false);
         search.pos.undo<Us>(Move());
 
         if (is_stopping()) {
