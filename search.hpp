@@ -84,7 +84,7 @@ public:
     }
 
     template <Color Us>
-    int alpha_beta(int alpha, int beta, int depth);
+    int alpha_beta(int alpha, int beta, int depth, bool do_null_move = true);
 
     template <Color Us>
     int quiesce(int alpha, int beta, int depth);

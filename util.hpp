@@ -19,7 +19,8 @@ enum GameProgress {
 
 GameProgress get_progress(int mv1, int mv2);
 
-bool has_non_pawn_material(const Position& pos, Color c);
+template <Color Us>
+bool has_non_pawn_material(const Position& pos);
 
 template <Color C>
 MoveFlags generate_move_flags(const Position& pos, Square from, Square to);

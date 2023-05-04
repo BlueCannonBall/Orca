@@ -6,9 +6,10 @@ GameProgress get_progress(int mv1, int mv2) {
     return (mv1 <= 1300 && mv2 <= 1300) ? ENDGAME : MIDGAME;
 }
 
-bool has_non_pawn_material(const Position& pos, Color c) {
+template <Color Us>
+bool has_non_pawn_material(const Position& pos) {
     for (PieceType i = KNIGHT; i < NPIECE_TYPES - 1; ++i) {
-        if (pos.bitboard_of(c, i)) {
+        if (pos.bitboard_of(Us, i)) {
             return true;
         }
     }
@@ -108,3 +109,6 @@ ProphetBoard generate_prophet_board(const Position& pos) {
     ret.side_to_move = pos.turn();
     return ret;
 }
+
+template bool has_non_pawn_material<WHITE>(const Position& pos);
+template bool has_non_pawn_material<BLACK>(const Position& pos);
