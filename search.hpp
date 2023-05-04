@@ -1,14 +1,17 @@
 #pragma once
 
 #include "evaluation.hpp"
+#include "parallel_hashmap/phmap.h"
 #include "surge/src/position.h"
 #include "surge/src/types.h"
+#include "util.hpp"
 #include "threadpool.hpp"
-#include "uci.hpp"
+#include <functional>
+#include <utility>
 #include <boost/atomic.hpp>
+#include <boost/thread/mutex.hpp>
 #include <chrono>
 #include <prophet.h>
-#include <unordered_map>
 #include <vector>
 
 enum TTEntryFlag {
@@ -32,9 +35,9 @@ public:
         flag(flag) {}
 };
 
-typedef std::unordered_map<uint64_t, TTEntry> TT;
+typedef phmap::parallel_flat_hash_map<uint64_t, TTEntry, std::hash<uint64_t>, std::equal_to<uint64_t>, std::allocator<std::pair<uint64_t, TTEntry>>, 4, boost::mutex> TT;
 typedef Move KillerMoves[NCOLORS][NHISTORY][3];
-typedef std::unordered_map<uint64_t, unsigned short> RT;
+typedef phmap::flat_hash_map<uint64_t, unsigned short> RT;
 
 struct Search {
     Position pos;
@@ -51,14 +54,16 @@ public:
     Search search;
     int starting_depth;
     unsigned long long nodes = 0;
+    TT& tt;
     const boost::atomic<bool>& stop;
-    TT* tt;
     KillerMoves killer_moves;
     int history_scores[NSQUARES][NSQUARES];
+    int last_score;
 
-    Finder(std::chrono::steady_clock::time_point start_time, const Search& search, const boost::atomic<bool>& stop):
+    Finder(std::chrono::steady_clock::time_point start_time, const Search& search, TT& tt, const boost::atomic<bool>& stop):
         start_time(start_time),
         search(search),
+        tt(tt),
         stop(stop),
         starting_ply(search.pos.game_ply) {
         memset(this->killer_moves, 0, sizeof(this->killer_moves));
@@ -114,4 +119,4 @@ protected:
     void update_history_score(Move move, int depth);
 };
 
-std::vector<Move> get_pv(Position pos, const TT* tt);
+std::vector<Move> get_pv(Position pos, const TT& tt);
