@@ -19,10 +19,13 @@
 void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bool>& stop) {
     tp::ThreadPool pool;
     boost::mutex mtx;
+    TT tt;
     phmap::flat_hash_map<boost::thread::id, Prophet*> prophets;
     Search search;
     while (channel.pop(search) == boost::fibers::channel_op_status::success) {
-        if (search.quit) {
+        if (search.new_game) {
+            tt.clear();
+        } else if (search.quit) {
             return;
         }
 
@@ -38,7 +41,6 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
         }
 
         std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
-        TT tt;
         std::vector<Finder> finders(last_move - moves, Finder(start_time, search, tt, stop));
 
         const auto is_stopping = [start_time, &search, &stop](int depth) {
@@ -162,6 +164,14 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
         }
 
         uci::bestmove(best_move, ponder_move);
+
+        for (auto entry_it = tt.begin(); entry_it != tt.end();) {
+            if ((entry_it->second.depth -= 2) <= 0) {
+                entry_it = tt.erase(entry_it);
+            } else {
+                ++entry_it;
+            }
+        }
     }
 }
 
@@ -177,6 +187,7 @@ int main() {
 
     Position pos(DEFAULT_FEN);
     RT rt;
+    bool new_game = false;
 
     boost::atomic<bool> stop(false);
     boost::fibers::unbuffered_channel<Search> channel;
@@ -197,6 +208,12 @@ int main() {
             str_case("isready"):
             {
                 uci::send_message("readyok");
+                break;
+            }
+
+            str_case("ucinewgame"):
+            {
+                new_game = true;
                 break;
             }
 
@@ -354,7 +371,9 @@ int main() {
                     .rt = rt,
                     .time = search_time,
                     .target_depth = depth,
+                    .new_game = new_game,
                 });
+                new_game = false;
 
                 break;
             }
