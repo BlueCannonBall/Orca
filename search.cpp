@@ -40,16 +40,23 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
             entry = a.second;
         })) {
         if (entry.depth >= depth) {
+            int score = entry.score;
+            if (score >= piece_values[KING] - NHISTORY) {
+                score -= current_ply();
+            } else if (score <= -piece_values[KING] + NHISTORY) {
+                score += current_ply();
+            }
+
             if (entry.flag == EXACT) {
-                return entry.score;
+                return score;
             } else if (entry.flag == LOWERBOUND) {
-                alpha = std::max(alpha, entry.score);
+                alpha = std::max(alpha, score);
             } else if (entry.flag == UPPERBOUND) {
-                beta = std::min(beta, entry.score);
+                beta = std::min(beta, score);
             }
 
             if (alpha >= beta) {
-                return entry.score;
+                return score;
             }
         }
         hash_move = entry.best_move;
