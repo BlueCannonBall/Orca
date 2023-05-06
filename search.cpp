@@ -307,8 +307,13 @@ int Finder::quiesce(int alpha, int beta, int depth) {
     });
 
     for (const Move* move = moves; move != last_move; move++) {
-        if (!move->is_capture() || sort_scores[move->from()][move->to()] < 0) {
+        if (!move->is_capture()) {
             continue;
+        }
+
+        // Skip bad captures
+        if (sort_scores[move->from()][move->to()] < 0) {
+            break;
         }
 
         // Delta pruning
