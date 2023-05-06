@@ -29,11 +29,6 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
         depth++;
     }
 
-    // Razoring
-    if (depth == 2 && evaluation + piece_values[ROOK] <= alpha) {
-        depth--;
-    }
-
     Move hash_move;
     TTEntry entry;
     if (tt.if_contains(search.pos.get_hash(), [&entry](const auto& a) {
