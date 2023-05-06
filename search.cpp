@@ -242,6 +242,11 @@ int Finder::quiesce(int alpha, int beta, int depth) {
         alpha = evaluation;
     }
 
+    // Quiescence search limit
+    if (depth <= -5) {
+        return alpha;
+    }
+
     Move hash_move;
     tt.if_contains(search.pos.get_hash(), [&hash_move](const auto& entry) {
         hash_move = entry.second.best_move;
