@@ -152,9 +152,9 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
 
                 std::vector<std::string> args;
                 if (current_best_move_score >= piece_values[KING] - NHISTORY) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((std::min(piece_values[KING] - current_best_move_score, depth) + 1) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((piece_values[KING] - current_best_move_score + 1) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
                 } else if (current_best_move_score <= -piece_values[KING] + NHISTORY) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string(-std::max(current_best_move_score + piece_values[KING], depth) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string(-(current_best_move_score + piece_values[KING]) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
                 } else {
                     args = {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
                 }
