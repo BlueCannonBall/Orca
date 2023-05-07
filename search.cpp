@@ -213,8 +213,15 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
     }
 
     if (!is_stopping()) {
-        if (!tt.modify_if(search.pos.get_hash(), [depth, alpha, best_move, flag](auto& entry) {
-                entry.second.score = alpha;
+        if (!tt.modify_if(search.pos.get_hash(), [this, depth, alpha, best_move, flag](auto& entry) {
+                int score = alpha;
+                if (score >= piece_values[KING] - NHISTORY) {
+                    score += current_ply();
+                } else if (score <= -piece_values[KING] + NHISTORY) {
+                    score -= current_ply();
+                }
+
+                entry.second.score = score;
                 entry.second.depth = depth;
                 entry.second.best_move = best_move;
                 entry.second.flag = flag;
@@ -240,11 +247,6 @@ int Finder::quiesce(int alpha, int beta, int depth) {
         return beta;
     } else if (alpha < evaluation) {
         alpha = evaluation;
-    }
-
-    // Quiescence search limit
-    if (depth <= -5) {
-        return alpha;
     }
 
     Move hash_move;
