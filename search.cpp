@@ -156,10 +156,12 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
         // Late move reduction
         int reduced_depth = depth;
         if (!is_pv && !in_check && depth > 2 && move - moves > 3) {
-            if (move - moves < 6) {
-                reduced_depth = depth - 1;
+            if (move - moves < 7) {
+                reduced_depth -= 1;
+            } else if (move - moves < 11) {
+                reduced_depth -= 2;
             } else {
-                reduced_depth = depth - (depth / 3);
+                reduced_depth -= 3;
             }
         }
 
