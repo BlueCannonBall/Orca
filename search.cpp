@@ -22,7 +22,6 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
     }
 
     bool in_check = search.pos.in_check<Us>();
-    int evaluation = evaluate<Us>(search.pos);
 
     // Check extensions
     if (in_check) {
@@ -67,6 +66,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
 
     // Reverse futility pruning
     if (!is_pv && !in_check && depth <= 8) {
+        int evaluation = evaluate_nnue<Us>(search.pos);
         if (evaluation - (120 * depth) >= beta) {
             return evaluation;
         }
