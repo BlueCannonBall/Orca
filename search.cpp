@@ -155,18 +155,11 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
     for (const Move* move = moves; move != last_move; move++) {
         // Late move reduction
         int reduced_depth = depth;
-        if (!is_pv && !in_check && depth > 2 && move - moves > 3) {
-            if (move - moves < 7) {
-                reduced_depth -= 1;
-            } else if (move - moves < 11) {
-                reduced_depth -= 2;
-            } else {
-                reduced_depth -= 3;
-            }
+        if (move - moves > 4 && depth > 2) {
+            reduced_depth -= 2;
         }
 
-    // Principle variation search
-    pvs:
+        // Principle variation search
         int score;
         search.pos.play<Us>(*move);
         if (hash_move.is_null() || *move == hash_move || moves[0] != hash_move) {
@@ -184,11 +177,6 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
         }
 
         if (score > alpha) {
-            if (reduced_depth != depth) {
-                reduced_depth = depth;
-                goto pvs;
-            }
-
             best_move = *move;
             if (score >= beta) {
                 if (move->flags() == QUIET) {
