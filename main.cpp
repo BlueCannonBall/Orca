@@ -1,6 +1,5 @@
 #include "evaluation.hpp"
 #include "logger.hpp"
-#include "parallel_hashmap/phmap.h"
 #include "search.hpp"
 #include "surge/src/position.h"
 #include "surge/src/types.h"
@@ -12,6 +11,7 @@
 #include <boost/thread.hpp>
 #include <chrono>
 #include <cmath>
+#include <map>
 #include <prophet.h>
 #include <string>
 #include <vector>
@@ -19,12 +19,12 @@
 void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bool>& stop) {
     tp::ThreadPool pool;
     boost::mutex mtx;
-    TT tt;
-    phmap::flat_hash_map<boost::thread::id, Prophet*> prophets;
+    std::map<boost::thread::id, TT> tts;
+    std::map<boost::thread::id, Prophet*> prophets;
     Search search;
     while (channel.pop(search) == boost::fibers::channel_op_status::success) {
         if (search.new_game) {
-            tt.clear();
+            tts.clear();
         } else if (search.quit) {
             return;
         }
@@ -41,7 +41,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
         }
 
         std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
-        std::vector<Finder> finders(last_move - moves, Finder(start_time, search, tt, stop));
+        std::vector<Finder> finders(last_move - moves, Finder(start_time, search, stop));
 
         const auto is_stopping = [start_time, &search, &stop](int depth) {
             return depth > 1 && (std::chrono::steady_clock::now() - start_time > search.time || stop.load(boost::memory_order_relaxed));
@@ -61,10 +61,11 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
 
             for (Move* move_ptr = moves; move_ptr != last_move; move_ptr++) {
                 Move move = *move_ptr;
-                tasks.push_back(pool.schedule([&mtx, &prophets, us, depth, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
+                tasks.push_back(pool.schedule([&mtx, &tts, &prophets, us, depth, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
                     finder->nodes = 0;
+                    finder->tt = &tts[boost::this_thread::get_id()];
 
                     decltype(prophets)::iterator prophet_it;
                     mtx.lock();
@@ -137,7 +138,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                 }
 
                 DYN_COLOR_CALL(search.pos.play, us, best_move);
-                std::vector<Move> pv = get_pv(search.pos, tt);
+                std::vector<Move> pv = get_pv(search.pos, finders[std::find(moves, last_move, best_move) - moves].tt);
                 pv.insert(pv.begin(), best_move);
                 pv.resize(std::min((int) pv.size(), depth));
                 if (pv.size() > 1) {
@@ -165,11 +166,13 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
 
         uci::bestmove(best_move, ponder_move);
 
-        for (auto entry_it = tt.begin(); entry_it != tt.end();) {
-            if ((entry_it->second.depth -= 2) <= 0) {
-                entry_it = tt.erase(entry_it);
-            } else {
-                ++entry_it;
+        for (auto& tt : tts) {
+            for (auto entry_it = tt.second.begin(); entry_it != tt.second.end();) {
+                if ((entry_it->second.depth -= 2) <= 0) {
+                    entry_it = tt.second.erase(entry_it);
+                } else {
+                    ++entry_it;
+                }
             }
         }
     }

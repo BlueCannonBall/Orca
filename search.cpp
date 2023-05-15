@@ -7,7 +7,7 @@
 #include <cmath>
 
 template <Color Us>
-int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
+int Finder::alpha_beta(int alpha, int beta, int depth) {
     if (is_stopping()) {
         return 0;
     }
@@ -29,23 +29,21 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
     }
 
     Move hash_move;
-    TTEntry entry;
-    if (tt.if_contains(search.pos.get_hash(), [&entry](const auto& a) {
-            entry = a.second;
-        })) {
-        if (entry.depth >= depth) {
-            int score = entry.score;
+    TT::iterator entry_it;
+    if ((entry_it = tt->find(search.pos.get_hash())) != tt->end()) {
+        if (entry_it->second.depth >= depth) {
+            int score = entry_it->second.score;
             if (score >= piece_values[KING] - NHISTORY) {
                 score -= current_ply();
             } else if (score <= -piece_values[KING] + NHISTORY) {
                 score += current_ply();
             }
 
-            if (entry.flag == EXACT) {
+            if (entry_it->second.flag == EXACT) {
                 return score;
-            } else if (entry.flag == LOWERBOUND) {
+            } else if (entry_it->second.flag == LOWERBOUND) {
                 alpha = std::max(alpha, score);
-            } else if (entry.flag == UPPERBOUND) {
+            } else if (entry_it->second.flag == UPPERBOUND) {
                 beta = std::min(beta, score);
             }
 
@@ -53,7 +51,7 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
                 return score;
             }
         }
-        hash_move = entry.best_move;
+        hash_move = entry_it->second.best_move;
     }
 
     nodes++;
@@ -66,24 +64,9 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
 
     // Reverse futility pruning
     if (!is_pv && !in_check && depth <= 8) {
-        int evaluation = evaluate<Us>(search.pos);
+        int evaluation = evaluate_nnue<Us>(search.pos);
         if (evaluation - (120 * depth) >= beta) {
             return evaluation;
-        }
-    }
-
-    // Null move pruning
-    if (do_null_move && !is_pv && !in_check && depth > 4 && has_non_pawn_material<Us>(search.pos)) {
-        search.pos.play<Us>(Move());
-        int score = -alpha_beta<~Us>(-beta, -beta + 1, depth - 3, false);
-        search.pos.undo<Us>(Move());
-
-        if (is_stopping()) {
-            return 0;
-        }
-
-        if (score >= beta) {
-            return beta;
         }
     }
 
@@ -203,20 +186,20 @@ int Finder::alpha_beta(int alpha, int beta, int depth, bool do_null_move) {
     }
 
     if (!is_stopping()) {
-        if (!tt.modify_if(search.pos.get_hash(), [this, depth, alpha, best_move, flag](auto& entry) {
-                int score = alpha;
-                if (score >= piece_values[KING] - NHISTORY) {
-                    score += current_ply();
-                } else if (score <= -piece_values[KING] + NHISTORY) {
-                    score -= current_ply();
-                }
+        int score = alpha;
+        if (score >= piece_values[KING] - NHISTORY) {
+            score += current_ply();
+        } else if (score <= -piece_values[KING] + NHISTORY) {
+            score -= current_ply();
+        }
 
-                entry.second.score = score;
-                entry.second.depth = depth;
-                entry.second.best_move = best_move;
-                entry.second.flag = flag;
-            })) {
-            tt.emplace(std::make_pair<uint64_t, TTEntry>(search.pos.get_hash(), TTEntry(alpha, depth, best_move, flag)));
+        if (entry_it != tt->end()) {
+            entry_it->second.score = score;
+            entry_it->second.depth = depth;
+            entry_it->second.best_move = best_move;
+            entry_it->second.flag = flag;
+        } else {
+            tt->emplace(std::make_pair<uint64_t, TTEntry>(search.pos.get_hash(), TTEntry(score, depth, best_move, flag)));
         }
     }
 
@@ -240,9 +223,10 @@ int Finder::quiesce(int alpha, int beta, int depth) {
     }
 
     Move hash_move;
-    tt.if_contains(search.pos.get_hash(), [&hash_move](const auto& entry) {
-        hash_move = entry.second.best_move;
-    });
+    TT::const_iterator entry_it;
+    if ((entry_it = tt->find(search.pos.get_hash())) != tt->end()) {
+        hash_move = entry_it->second.best_move;
+    }
 
     bool late_endgame = !has_non_pawn_material<Us>(search.pos);
 
@@ -366,12 +350,12 @@ void Finder::update_history_score(Move move, int depth) {
     }
 }
 
-std::vector<Move> get_pv(Position pos, const TT& tt) {
+std::vector<Move> get_pv(Position pos, const TT* tt) {
     std::vector<Move> ret;
 
     for (Color side_to_move = pos.turn(); pos.game_ply < NHISTORY; side_to_move = ~side_to_move) {
         TT::const_iterator entry_it;
-        if ((entry_it = tt.find(pos.get_hash())) != tt.end()) {
+        if ((entry_it = tt->find(pos.get_hash())) != tt->end()) {
             if (entry_it->second.best_move.is_null() || color_of(pos.at(entry_it->second.best_move.from())) != side_to_move) {
                 break;
             } else {
@@ -386,8 +370,8 @@ std::vector<Move> get_pv(Position pos, const TT& tt) {
     return ret;
 }
 
-template int Finder::alpha_beta<WHITE>(int alpha, int beta, int depth, bool do_null_move);
-template int Finder::alpha_beta<BLACK>(int alpha, int beta, int depth, bool do_null_move);
+template int Finder::alpha_beta<WHITE>(int alpha, int beta, int depth);
+template int Finder::alpha_beta<BLACK>(int alpha, int beta, int depth);
 
 template int Finder::quiesce<WHITE>(int alpha, int beta, int depth);
 template int Finder::quiesce<BLACK>(int alpha, int beta, int depth);
