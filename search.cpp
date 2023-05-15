@@ -288,7 +288,7 @@ int Finder::quiesce(int alpha, int beta, int depth) {
         }
 
         // Delta pruning
-        if (evaluation + piece_values[type_of(search.pos.at(move->to()))] + 200 < alpha && !late_endgame) {
+        if (!late_endgame && evaluation + piece_values[type_of(search.pos.at(move->to()))] + 200 < alpha) {
             continue;
         }
 
