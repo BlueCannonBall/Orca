@@ -3,7 +3,6 @@
 #include "prophet.h"
 #include "util.hpp"
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 
 template <Color Us>

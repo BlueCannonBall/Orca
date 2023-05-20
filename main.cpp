@@ -217,6 +217,7 @@ int main() {
             str_case("ucinewgame"):
             {
                 new_game = true;
+                rt.clear();
                 break;
             }
 
