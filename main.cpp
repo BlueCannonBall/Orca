@@ -140,7 +140,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                 DYN_COLOR_CALL(search.pos.play, us, best_move);
                 std::vector<Move> pv = get_pv(search.pos, finders[std::find(moves, last_move, best_move) - moves].tt);
                 pv.insert(pv.begin(), best_move);
-                pv.resize(std::min((int) pv.size(), depth));
+                pv.resize(std::min((int) pv.size(), depth * 2));
                 if (pv.size() > 1) {
                     ponder_move = pv[1];
                 }
