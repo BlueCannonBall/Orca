@@ -350,8 +350,8 @@ std::vector<Move> get_pv(Position pos, const TT* tt) {
 
     for (Color side_to_move = pos.turn(); pos.game_ply < NHISTORY; side_to_move = ~side_to_move) {
         TT::const_iterator entry_it;
-        if ((entry_it = tt->find(pos.get_hash())) != tt->end() || color_of(pos.at(entry_it->second.best_move.from())) != side_to_move) {
-            if (entry_it->second.best_move.is_null()) {
+        if ((entry_it = tt->find(pos.get_hash())) != tt->end()) {
+            if (entry_it->second.best_move.is_null() || color_of(pos.at(entry_it->second.best_move.from())) != side_to_move) {
                 break;
             } else {
                 ret.push_back(entry_it->second.best_move);
