@@ -348,9 +348,11 @@ std::vector<Move> get_pv(Position pos, const TT* tt) {
     std::vector<Move> ret;
 
     for (Color side_to_move = pos.turn(); pos.game_ply < NHISTORY; side_to_move = ~side_to_move) {
+        Move moves[218];
+        Move* last_move = DYN_COLOR_CALL(pos.generate_legals, side_to_move, moves);
         TT::const_iterator entry_it;
         if ((entry_it = tt->find(pos.get_hash())) != tt->end()) {
-            if (entry_it->second.best_move.is_null() || color_of(pos.at(entry_it->second.best_move.from())) != side_to_move) {
+            if (std::find(moves, last_move, entry_it->second.best_move) == last_move) {
                 break;
             } else {
                 ret.push_back(entry_it->second.best_move);
