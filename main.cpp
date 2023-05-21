@@ -48,7 +48,6 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
         };
 
         Move best_move;
-        Move ponder_move;
         unsigned long long nodes = 0;
         int max_game_ply = search.target_depth == -1 ? NHISTORY : (search.pos.game_ply + search.target_depth);
 
@@ -141,9 +140,6 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                 std::vector<Move> pv = get_pv(search.pos, finders[std::find(moves, last_move, best_move) - moves].tt);
                 pv.insert(pv.begin(), best_move);
                 pv.resize(std::min((int) pv.size(), depth * 2));
-                if (pv.size() > 1) {
-                    ponder_move = pv[1];
-                }
                 DYN_COLOR_CALL(search.pos.undo, us, best_move);
                 std::vector<std::string> pv_strings;
                 std::transform(pv.cbegin(), pv.cend(), std::back_inserter(pv_strings), uci::format_move);
@@ -164,7 +160,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
             }
         }
 
-        uci::bestmove(best_move, ponder_move);
+        uci::bestmove(best_move);
 
         for (auto& tt : tts) {
             for (auto entry_it = tt.second.begin(); entry_it != tt.second.end();) {
@@ -216,8 +212,10 @@ int main() {
 
             str_case("ucinewgame"):
             {
-                new_game = true;
-                rt.clear();
+                if (!new_game) {
+                    rt.clear();
+                    new_game = true;
+                }
                 break;
             }
 
@@ -285,7 +283,6 @@ int main() {
                 std::chrono::milliseconds winc = 0ms;
                 std::chrono::milliseconds binc = 0ms;
                 bool infinite = false;
-                bool ponder = false;
                 int depth = -1;
                 for (auto it = message.args.begin(); it != message.args.end(); it++) {
                     str_switch(*it) {
@@ -317,11 +314,6 @@ int main() {
                         str_case("infinite"):
                         {
                             infinite = true;
-                            break;
-                        }
-                        str_case("ponder"):
-                        {
-                            ponder = true;
                             break;
                         }
                         str_case("depth"):
@@ -366,8 +358,6 @@ int main() {
                     } else {
                         throw std::logic_error("Invalid side to move");
                     }
-
-                    if (ponder) search_time *= 2;
                 }
 
                 channel.push(Search {
