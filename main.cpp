@@ -19,19 +19,17 @@
 void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bool>& stop) {
     tp::ThreadPool pool;
     boost::mutex mtx;
-    std::map<boost::thread::id, TT> tts;
     std::map<boost::thread::id, Prophet*> prophets;
     Search search;
     while (channel.pop(search) == boost::fibers::channel_op_status::success) {
-        if (search.new_game) {
-            tts.clear();
-        } else if (search.quit) {
+        if (search.quit) {
             return;
         }
 
         stop.store(false, boost::memory_order_relaxed);
 
         Color us = search.pos.turn();
+        std::map<boost::thread::id, TT> tts;
 
         Move moves[218];
         Move* last_move = DYN_COLOR_CALL(search.pos.generate_legals, us, moves);
@@ -60,7 +58,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
 
             for (Move* move_ptr = moves; move_ptr != last_move; move_ptr++) {
                 Move move = *move_ptr;
-                tasks.push_back(pool.schedule([&mtx, &tts, &prophets, us, depth, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
+                tasks.push_back(pool.schedule([&mtx, &prophets, us, &tts, depth, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
                     finder->nodes = 0;
@@ -161,16 +159,6 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
         }
 
         uci::bestmove(best_move);
-
-        for (auto& tt : tts) {
-            for (auto entry_it = tt.second.begin(); entry_it != tt.second.end();) {
-                if ((entry_it->second.depth -= 2) <= 0) {
-                    entry_it = tt.second.erase(entry_it);
-                } else {
-                    ++entry_it;
-                }
-            }
-        }
     }
 }
 
@@ -186,7 +174,6 @@ int main() {
 
     Position pos(DEFAULT_FEN);
     RT rt;
-    bool new_game = false;
 
     boost::atomic<bool> stop(false);
     boost::fibers::unbuffered_channel<Search> channel;
@@ -207,15 +194,6 @@ int main() {
             str_case("isready"):
             {
                 uci::send_message("readyok");
-                break;
-            }
-
-            str_case("ucinewgame"):
-            {
-                if (!new_game) {
-                    rt.clear();
-                    new_game = true;
-                }
                 break;
             }
 
@@ -365,9 +343,7 @@ int main() {
                     .rt = rt,
                     .time = search_time,
                     .target_depth = depth,
-                    .new_game = new_game,
                 });
-                new_game = false;
 
                 break;
             }
