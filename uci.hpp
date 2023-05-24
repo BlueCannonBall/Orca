@@ -24,7 +24,18 @@ namespace uci {
 
     inline std::string format_move(Move move) {
         std::ostringstream ss;
-        ss << SQSTR[move.from()] << SQSTR[move.to()];
+        ss << SQSTR[move.from()];
+
+        Square to_square = move.to();
+        if (move.is_castling()) {
+            if (file_of(move.to()) == AFILE) {
+                to_square = create_square(CFILE, rank_of(move.to()));
+            } else if (file_of(move.to()) == HFILE) {
+                to_square = create_square(GFILE, rank_of(move.to()));
+            }
+        }
+        ss << SQSTR[to_square];
+
         if (move.is_promotion()) {
             switch (move.promotion()) {
             case KNIGHT:
