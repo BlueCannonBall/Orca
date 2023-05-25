@@ -54,70 +54,103 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
             int current_best_move_score = INT_MIN;
             int current_best_move_static_evaluation = INT_MIN;
 
+            // Young Brothers Wait Concept
+            int alpha = -piece_values[KING];
+            if (!best_move.is_null()) {
+                Finder& finder = finders[std::find(moves, last_move, best_move) - moves];
+                finder.starting_depth = depth;
+                finder.nodes = 0;
+                finder.tt = &tts[boost::this_thread::get_id()];
+
+                decltype(prophets)::iterator prophet_it;
+                if ((prophet_it = prophets.find(boost::this_thread::get_id())) != prophets.end()) {
+                    finder.accept_prophet(prophet_it->second);
+                } else {
+                    Prophet* new_prophet = raise_prophet(nullptr);
+                    prophets[boost::this_thread::get_id()] = new_prophet;
+                    finder.accept_prophet(new_prophet);
+                }
+
+                DYN_COLOR_CALL(finder.search.pos.play, us, best_move);
+                int static_evaluation = DYN_COLOR_CALL(evaluate_nnue, us, finder.search.pos);
+                alpha = -DYN_COLOR_CALL(finder.alpha_beta, ~us, alpha, piece_values[KING], depth - 1);
+                DYN_COLOR_CALL(finder.search.pos.undo, us, best_move);
+
+                if (!finder.is_stopping()) {
+                    current_best_move = best_move;
+                    current_best_move_score = alpha;
+                    current_best_move_static_evaluation = static_evaluation;
+                } else {
+                    break;
+                }
+            }
+
             std::vector<std::shared_ptr<tp::Task>> tasks;
 
             for (Move* move_ptr = moves; move_ptr != last_move; move_ptr++) {
                 Move move = *move_ptr;
-                tasks.push_back(pool.schedule([&mtx, &prophets, us, &tts, depth, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
-                    mtx.lock();
-                    Finder* finder = (Finder*) data;
-                    finder->starting_depth = depth;
-                    finder->nodes = 0;
-                    finder->tt = &tts[boost::this_thread::get_id()];
-
-                    decltype(prophets)::iterator prophet_it;
-                    if ((prophet_it = prophets.find(boost::this_thread::get_id())) != prophets.end()) {
-                        finder->accept_prophet(prophet_it->second);
-                    } else {
-                        Prophet* new_prophet = raise_prophet(nullptr);
-                        prophets[boost::this_thread::get_id()] = new_prophet;
-                        finder->accept_prophet(new_prophet);
-                    }
-                    mtx.unlock();
-
-                    int score, static_evaluation;
-                    RT::const_iterator entry_it;
-                    DYN_COLOR_CALL(finder->search.pos.play, us, move);
-                    static_evaluation = DYN_COLOR_CALL(evaluate_nnue, us, finder->search.pos);
-                    if ((entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && entry_it->second + 1 == 3) {
-                        score = 0;
-                    } else {
-                        bool repetition = false;
-                        Move nested_moves[218];
-                        Move* last_nested_move = DYN_COLOR_CALL(finder->search.pos.generate_legals, ~us, nested_moves);
-                        for (Move* nested_move = nested_moves; nested_move != last_nested_move; nested_move++) {
-                            RT::const_iterator nested_entry_it;
-                            DYN_COLOR_CALL(finder->search.pos.play, ~us, *nested_move);
-                            if ((nested_entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && nested_entry_it->second + 1 == 3) {
-                                repetition = true;
-                                DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
-                                break;
-                            }
-                            DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
-                        }
-                        if (repetition) {
-                            score = 0;
-                        } else {
-                            score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, -piece_values[KING], piece_values[KING], depth - 1);
-                        }
-                    }
-                    DYN_COLOR_CALL(finder->search.pos.undo, us, move);
-
-                    if (!finder->is_stopping()) {
+                if (move != best_move) {
+                    tasks.push_back(pool.schedule([&mtx, &prophets, us, &tts, depth, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, alpha, move](void* data) {
                         mtx.lock();
-                        if (score > current_best_move_score) {
-                            current_best_move = move;
-                            current_best_move_score = score;
-                            current_best_move_static_evaluation = static_evaluation;
-                        } else if (score == current_best_move_score && static_evaluation > current_best_move_static_evaluation) {
-                            current_best_move = move;
-                            current_best_move_score = score;
-                            current_best_move_static_evaluation = static_evaluation;
+                        Finder* finder = (Finder*) data;
+                        finder->starting_depth = depth;
+                        finder->nodes = 0;
+                        finder->tt = &tts[boost::this_thread::get_id()];
+
+                        decltype(prophets)::iterator prophet_it;
+                        if ((prophet_it = prophets.find(boost::this_thread::get_id())) != prophets.end()) {
+                            finder->accept_prophet(prophet_it->second);
+                        } else {
+                            Prophet* new_prophet = raise_prophet(nullptr);
+                            prophets[boost::this_thread::get_id()] = new_prophet;
+                            finder->accept_prophet(new_prophet);
                         }
                         mtx.unlock();
-                    }
-                },
-                    &finders[move_ptr - moves]));
+
+                        int score, static_evaluation;
+                        RT::const_iterator entry_it;
+                        DYN_COLOR_CALL(finder->search.pos.play, us, move);
+                        static_evaluation = DYN_COLOR_CALL(evaluate_nnue, us, finder->search.pos);
+                        if ((entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && entry_it->second + 1 == 3) {
+                            score = 0;
+                        } else {
+                            bool repetition = false;
+                            Move nested_moves[218];
+                            Move* last_nested_move = DYN_COLOR_CALL(finder->search.pos.generate_legals, ~us, nested_moves);
+                            for (Move* nested_move = nested_moves; nested_move != last_nested_move; nested_move++) {
+                                RT::const_iterator nested_entry_it;
+                                DYN_COLOR_CALL(finder->search.pos.play, ~us, *nested_move);
+                                if ((nested_entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && nested_entry_it->second + 1 == 3) {
+                                    repetition = true;
+                                    DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
+                                    break;
+                                }
+                                DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
+                            }
+                            if (repetition) {
+                                score = 0;
+                            } else {
+                                score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, alpha, piece_values[KING], depth - 1);
+                            }
+                        }
+                        DYN_COLOR_CALL(finder->search.pos.undo, us, move);
+
+                        if (!finder->is_stopping()) {
+                            mtx.lock();
+                            if (score > current_best_move_score) {
+                                current_best_move = move;
+                                current_best_move_score = score;
+                                current_best_move_static_evaluation = static_evaluation;
+                            } else if (score == current_best_move_score && static_evaluation > current_best_move_static_evaluation) {
+                                current_best_move = move;
+                                current_best_move_score = score;
+                                current_best_move_static_evaluation = static_evaluation;
+                            }
+                            mtx.unlock();
+                        }
+                    },
+                        &finders[move_ptr - moves]));
+                }
             }
 
             for (const auto& task : tasks) {
