@@ -71,14 +71,38 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                     finder.accept_prophet(new_prophet);
                 }
 
+                int score, static_evaluation;
+                RT::const_iterator entry_it;
                 DYN_COLOR_CALL(finder.search.pos.play, us, best_move);
-                int static_evaluation = DYN_COLOR_CALL(evaluate_nnue, us, finder.search.pos);
-                alpha = -DYN_COLOR_CALL(finder.alpha_beta, ~us, alpha, piece_values[KING], depth - 1);
+                static_evaluation = DYN_COLOR_CALL(evaluate_nnue, us, finder.search.pos);
+                if ((entry_it = finder.search.rt.find(finder.search.pos.get_hash())) != finder.search.rt.end() && entry_it->second + 1 == 3) {
+                    score = 0;
+                } else {
+                    bool repetition = false;
+                    Move nested_moves[218];
+                    Move* last_nested_move = DYN_COLOR_CALL(finder.search.pos.generate_legals, ~us, nested_moves);
+                    for (Move* nested_move = nested_moves; nested_move != last_nested_move; nested_move++) {
+                        RT::const_iterator nested_entry_it;
+                        DYN_COLOR_CALL(finder.search.pos.play, ~us, *nested_move);
+                        if ((nested_entry_it = finder.search.rt.find(finder.search.pos.get_hash())) != finder.search.rt.end() && nested_entry_it->second + 1 == 3) {
+                            repetition = true;
+                            DYN_COLOR_CALL(finder.search.pos.undo, ~us, *nested_move);
+                            break;
+                        }
+                        DYN_COLOR_CALL(finder.search.pos.undo, ~us, *nested_move);
+                    }
+                    if (repetition) {
+                        score = 0;
+                    } else {
+                        score = -DYN_COLOR_CALL(finder.alpha_beta, ~us, alpha, piece_values[KING], depth - 1);
+                        alpha = score;
+                    }
+                }
                 DYN_COLOR_CALL(finder.search.pos.undo, us, best_move);
 
                 if (!finder.is_stopping()) {
                     current_best_move = best_move;
-                    current_best_move_score = alpha;
+                    current_best_move_score = score;
                     current_best_move_static_evaluation = static_evaluation;
                 } else {
                     break;
