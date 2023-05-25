@@ -266,7 +266,7 @@ int see(const Position& pos, Move move) {
     }
 
     if (move.is_capture()) {
-        ret += piece_values[pos.at(attacked_sq)];
+        ret += piece_values[type_of(pos.at(attacked_sq))];
     }
 
     for (Color side_to_play = ~Us;; side_to_play = ~side_to_play) {

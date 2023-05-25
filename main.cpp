@@ -59,13 +59,13 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
             for (Move* move_ptr = moves; move_ptr != last_move; move_ptr++) {
                 Move move = *move_ptr;
                 tasks.push_back(pool.schedule([&mtx, &prophets, us, &tts, depth, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
+                    mtx.lock();
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
                     finder->nodes = 0;
                     finder->tt = &tts[boost::this_thread::get_id()];
 
                     decltype(prophets)::iterator prophet_it;
-                    mtx.lock();
                     if ((prophet_it = prophets.find(boost::this_thread::get_id())) != prophets.end()) {
                         finder->accept_prophet(prophet_it->second);
                     } else {
