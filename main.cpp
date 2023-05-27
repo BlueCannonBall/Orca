@@ -327,7 +327,7 @@ int main() {
                         if (movetime != 0ms) {
                             search_time = movetime;
                         } else if (wtime != 0ms) {
-                            search_time = std::min(wtime / moves_left, 30000ms);
+                            search_time = std::min(wtime / moves_left, 36000000ms); // Limit search to 10 hours
                         }
 
                         if (std::max(search_time - 250ms, 0ms) < winc) {
@@ -337,7 +337,7 @@ int main() {
                         if (movetime != 0ms) {
                             search_time = movetime;
                         } else if (btime != 0ms) {
-                            search_time = std::min(btime / moves_left, 30000ms);
+                            search_time = std::min(btime / moves_left, 36000000ms); // Limit search to 10 hours
                         }
 
                         if (std::max(search_time - 250ms, 0ms) < binc) {
