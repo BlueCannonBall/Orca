@@ -142,7 +142,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                 DYN_COLOR_CALL(search.pos.play, us, best_move);
                 std::vector<Move> pv = get_pv(search.pos, finders[std::find(moves, last_move, best_move) - moves].tt);
                 pv.insert(pv.begin(), best_move);
-                pv.resize(std::min((int) pv.size(), seldepth / 2));
+                pv.resize(std::min((int) pv.size(), seldepth));
                 DYN_COLOR_CALL(search.pos.undo, us, best_move);
                 std::vector<std::string> pv_strings;
                 std::transform(pv.cbegin(), pv.cend(), std::back_inserter(pv_strings), uci::format_move);
