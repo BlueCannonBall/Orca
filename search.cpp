@@ -82,15 +82,11 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
         if (move->flags() == QUIET) {
             if (is_killer_move<Us>(*move, current_ply())) {
                 sort_scores[move->from()][move->to()] = 2;
-                continue;
-            }
-
-            if (move->is_castling()) {
+            } else if (move->is_castling()) {
                 sort_scores[move->from()][move->to()] = 1;
-                continue;
+            } else {
+                sort_scores[move->from()][move->to()] = -30000 + get_history_score(*move);
             }
-
-            sort_scores[move->from()][move->to()] = -30000 + get_history_score(*move);
             continue;
         }
 
