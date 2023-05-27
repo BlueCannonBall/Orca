@@ -54,6 +54,9 @@ int Finder::alpha_beta(int alpha, int beta, int depth) {
     }
 
     nodes++;
+    if (current_ply() > seldepth) {
+        seldepth = current_ply();
+    }
 
     if (depth <= 0) {
         return quiesce<Us>(alpha, beta, depth - 1);
@@ -208,6 +211,9 @@ int Finder::quiesce(int alpha, int beta, int depth) {
     }
 
     nodes++;
+    if (current_ply() > seldepth) {
+        seldepth = current_ply();
+    }
 
     int evaluation = evaluate_nnue<Us>(search.pos);
 

@@ -62,6 +62,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                     mtx.lock();
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
+                    finder->seldepth = 0;
                     finder->nodes = 0;
                     finder->tt = &tts[boost::this_thread::get_id()];
 
@@ -130,14 +131,18 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
             if (!is_stopping(depth)) {
                 best_move = current_best_move;
                 nodes += last_move - moves;
+                int seldepth = 0;
                 for (const auto& finder : finders) {
                     nodes += finder.nodes;
+                    if (finder.seldepth > seldepth) {
+                        seldepth = finder.seldepth;
+                    }
                 }
 
                 DYN_COLOR_CALL(search.pos.play, us, best_move);
                 std::vector<Move> pv = get_pv(search.pos, finders[std::find(moves, last_move, best_move) - moves].tt);
                 pv.insert(pv.begin(), best_move);
-                pv.resize(std::min((int) pv.size(), depth * 2));
+                pv.resize(std::min((int) pv.size(), seldepth / 2));
                 DYN_COLOR_CALL(search.pos.undo, us, best_move);
                 std::vector<std::string> pv_strings;
                 std::transform(pv.cbegin(), pv.cend(), std::back_inserter(pv_strings), uci::format_move);
@@ -147,11 +152,11 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
 
                 std::vector<std::string> args;
                 if (current_best_move_score >= piece_values[KING] - NHISTORY) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string((piece_values[KING] - current_best_move_score + 1) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                    args = {"depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string((piece_values[KING] - current_best_move_score + 1) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
                 } else if (current_best_move_score <= -piece_values[KING] + NHISTORY) {
-                    args = {"depth", std::to_string(depth), "score", "mate", std::to_string(-(current_best_move_score + piece_values[KING]) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                    args = {"depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string(-(current_best_move_score + piece_values[KING]) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
                 } else {
-                    args = {"depth", std::to_string(depth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                    args = {"depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
                 }
                 args.insert(args.end(), pv_strings.begin(), pv_strings.end());
                 uci::send_message("info", args);

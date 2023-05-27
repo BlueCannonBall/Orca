@@ -51,6 +51,7 @@ public:
     std::chrono::steady_clock::time_point start_time;
     Search search;
     int starting_depth;
+    int seldepth = 0;
     unsigned long long nodes = 0;
     TT* tt;
     const boost::atomic<bool>& stop;
