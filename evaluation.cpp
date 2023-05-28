@@ -15,13 +15,21 @@ int evaluate_basic(const Position& pos) {
 }
 
 int evaluate_nn(const Position& pos) {
-    ProphetBoard prophet_board = generate_prophet_board(pos);
-    return prophet_sing_evaluation((Prophet*) pos.data, &prophet_board);
+    if (std::abs(DYN_COLOR_CALL(evaluate_basic, pos.turn(), pos)) > 11) {
+        return DYN_COLOR_CALL(evaluate, pos.turn(), pos);
+    } else {
+        ProphetBoard prophet_board = generate_prophet_board(pos);
+        return prophet_sing_evaluation((Prophet*) pos.data, &prophet_board);
+    }
 }
 
 template <Color Us>
 int evaluate_nnue(const Position& pos) {
-    return prophet_utter_evaluation((Prophet*) pos.data, Us);
+    if (std::abs(evaluate_basic<Us>(pos)) > 11) {
+        return evaluate<Us>(pos);
+    } else {
+        return prophet_utter_evaluation((Prophet*) pos.data, Us);
+    }
 }
 
 template <Color Us>
