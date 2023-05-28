@@ -8,6 +8,7 @@
 #include <boost/atomic.hpp>
 #include <boost/thread/mutex.hpp>
 #include <chrono>
+#include <cstdint>
 #include <prophet.h>
 #include <unordered_map>
 #include <utility>
@@ -41,6 +42,7 @@ typedef std::unordered_map<uint64_t, unsigned short> RT;
 struct Search {
     Position pos;
     RT rt;
+    uint8_t multipv = 1;
     std::chrono::milliseconds time;
     int target_depth = -1;
     bool quit = false;

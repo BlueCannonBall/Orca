@@ -8,13 +8,57 @@
 #include "util.hpp"
 #include <boost/atomic.hpp>
 #include <boost/fiber/unbuffered_channel.hpp>
+#include <boost/range/adaptor/indexed.hpp>
 #include <boost/thread.hpp>
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <map>
 #include <prophet.h>
 #include <string>
 #include <vector>
+
+class ScoredMove {
+public:
+    Move move;
+    Finder* finder;
+    int score;
+    int static_evaluation;
+
+    ScoredMove(Move move, Finder* finder, int score, int static_evaluation):
+        move(move),
+        finder(finder),
+        score(score),
+        static_evaluation(static_evaluation) {}
+
+    inline operator Move() const {
+        return this->move;
+    }
+
+    inline bool operator==(const ScoredMove& scored_move) const {
+        return this->move == scored_move.move;
+    }
+
+    inline bool operator!=(const ScoredMove& scored_move) const {
+        return this->move != scored_move.move;
+    }
+
+    inline bool operator>(const ScoredMove& scored_move) const {
+        return this->score > scored_move.score || (this->score == scored_move.score && this->static_evaluation > scored_move.static_evaluation);
+    }
+
+    inline bool operator<(const ScoredMove& scored_move) const {
+        return this->score < scored_move.score || (this->score == scored_move.score && this->static_evaluation < scored_move.static_evaluation);
+    }
+
+    inline bool operator>=(const ScoredMove& scored_move) const {
+        return this->score >= scored_move.score;
+    }
+
+    inline bool operator<=(const ScoredMove& scored_move) const {
+        return this->score <= scored_move.score;
+    }
+};
 
 void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bool>& stop) {
     tp::ThreadPool pool;
@@ -50,15 +94,12 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
         int max_game_ply = search.target_depth == -1 ? NHISTORY : (search.pos.game_ply + search.target_depth);
 
         for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply && depth <= 256; depth++) {
-            Move current_best_move;
-            int current_best_move_score = INT_MIN;
-            int current_best_move_static_evaluation = INT_MIN;
-
+            std::vector<ScoredMove> scored_moves;
             std::vector<std::shared_ptr<tp::Task>> tasks;
 
             for (Move* move_ptr = moves; move_ptr != last_move; move_ptr++) {
                 Move move = *move_ptr;
-                tasks.push_back(pool.schedule([&mtx, &prophets, us, &tts, depth, &current_best_move, &current_best_move_score, &current_best_move_static_evaluation, move](void* data) {
+                tasks.push_back(pool.schedule([&mtx, &prophets, us, &tts, depth, &scored_moves, move](void* data) {
                     mtx.lock();
                     Finder* finder = (Finder*) data;
                     finder->starting_depth = depth;
@@ -106,15 +147,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
 
                     if (!finder->is_stopping()) {
                         mtx.lock();
-                        if (score > current_best_move_score) {
-                            current_best_move = move;
-                            current_best_move_score = score;
-                            current_best_move_static_evaluation = static_evaluation;
-                        } else if (score == current_best_move_score && static_evaluation > current_best_move_static_evaluation) {
-                            current_best_move = move;
-                            current_best_move_score = score;
-                            current_best_move_static_evaluation = static_evaluation;
-                        }
+                        scored_moves.emplace_back(move, finder, score, static_evaluation);
                         mtx.unlock();
                     }
                 },
@@ -129,7 +162,9 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
             }
 
             if (!is_stopping(depth)) {
-                best_move = current_best_move;
+                std::sort(scored_moves.begin(), scored_moves.end(), std::greater<ScoredMove>());
+                best_move = scored_moves[0].move;
+
                 nodes += last_move - moves;
                 int seldepth = 0;
                 for (const auto& finder : finders) {
@@ -139,27 +174,33 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                     }
                 }
 
-                DYN_COLOR_CALL(search.pos.play, us, best_move);
-                std::vector<Move> pv = get_pv(search.pos, finders[std::find(moves, last_move, best_move) - moves].tt);
-                pv.insert(pv.begin(), best_move);
-                pv.resize(std::min((int) pv.size(), seldepth));
-                DYN_COLOR_CALL(search.pos.undo, us, best_move);
-                std::vector<std::string> pv_strings;
-                std::transform(pv.cbegin(), pv.cend(), std::back_inserter(pv_strings), uci::format_move);
-
                 std::chrono::milliseconds time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time);
                 unsigned long long nps = (nodes / std::max(time_elapsed.count(), 1l)) * 1000;
 
-                std::vector<std::string> args;
-                if (current_best_move_score >= piece_values[KING] - NHISTORY) {
-                    args = {"depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string((piece_values[KING] - current_best_move_score + 1) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
-                } else if (current_best_move_score <= -piece_values[KING] + NHISTORY) {
-                    args = {"depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string(-(current_best_move_score + piece_values[KING]) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
-                } else {
-                    args = {"depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "cp", std::to_string(current_best_move_score), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                for (const auto& scored_move : scored_moves | boost::adaptors::indexed(1)) {
+                    if (scored_move.index() > search.multipv) {
+                        break;
+                    }
+
+                    DYN_COLOR_CALL(search.pos.play, us, scored_move.value());
+                    std::vector<Move> pv = get_pv(search.pos, scored_move.value().finder->tt);
+                    pv.insert(pv.begin(), scored_move.value());
+                    pv.resize(std::min((int) pv.size(), seldepth));
+                    DYN_COLOR_CALL(search.pos.undo, us, scored_move.value());
+                    std::vector<std::string> pv_strings;
+                    std::transform(pv.cbegin(), pv.cend(), std::back_inserter(pv_strings), uci::format_move);
+
+                    std::vector<std::string> args;
+                    if (scored_move.value().score >= piece_values[KING] - NHISTORY) {
+                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string((piece_values[KING] - scored_move.value().score + 1) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                    } else if (scored_move.value().score <= -piece_values[KING] + NHISTORY) {
+                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string(-(scored_move.value().score + piece_values[KING]) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                    } else {
+                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "cp", std::to_string(scored_move.value().score), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                    }
+                    args.insert(args.end(), pv_strings.begin(), pv_strings.end());
+                    uci::send_message("info", args);
                 }
-                args.insert(args.end(), pv_strings.begin(), pv_strings.end());
-                uci::send_message("info", args);
             }
         }
 
@@ -184,6 +225,7 @@ int main() {
 
     Position pos(DEFAULT_FEN);
     RT rt;
+    uint8_t multipv = 1;
 
     boost::atomic<bool> stop(false);
     boost::fibers::unbuffered_channel<Search> channel;
@@ -197,6 +239,7 @@ int main() {
             {
                 uci::send_message("id", {"name", "Orca"});
                 uci::send_message("id", {"author", "BlueCannonBall"});
+                uci::send_message("option", {"name", "MultiPV", "type", "spin", "default", "1", "min", "1", "max", "255"});
                 uci::send_message("uciok");
                 break;
             }
@@ -204,6 +247,18 @@ int main() {
             str_case("isready"):
             {
                 uci::send_message("readyok");
+                break;
+            }
+
+            str_case("setoption"):
+            {
+                str_switch(message.args[1]) {
+                    str_case("MultiPV"):
+                    {
+                        multipv = std::stoi(message.args[3]);
+                        break;
+                    }
+                }
                 break;
             }
 
@@ -351,6 +406,7 @@ int main() {
                 channel.push(Search {
                     .pos = pos,
                     .rt = rt,
+                    .multipv = multipv,
                     .time = search_time,
                     .target_depth = depth,
                 });

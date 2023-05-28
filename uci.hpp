@@ -13,12 +13,12 @@
 
 namespace uci {
     namespace detail {
-        inline unsigned int hash(const std::string& s, int pos = 0) {
-            return !s[pos] ? 5381 : (hash(s, pos + 1) * 33) ^ s[pos];
+        inline unsigned int hash(const std::string& s, int i = 0) {
+            return !s[i] ? 5381 : (hash(s, i + 1) * 33) ^ s[i];
         }
 
-        constexpr unsigned int hash(const char* s, int pos = 0) {
-            return !s[pos] ? 5381 : (hash(s, pos + 1) * 33) ^ s[pos];
+        constexpr unsigned int hash(const char* s, int i = 0) {
+            return !s[i] ? 5381 : (hash(s, i + 1) * 33) ^ s[i];
         }
     } // namespace detail
 
