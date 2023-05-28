@@ -174,9 +174,9 @@ int main() {
     logger.info("Engine started");
 
     std::cout << "_______                         _____   ______   ______  ___________\n"
-                 "__  __ \\__________________ _    ___  | / /__  | / /_  / / /__  ____/\n"
-                 "_  / / /_  ___/  ___/  __ `/    __   |/ /__   |/ /_  / / /__  __/\n"
-                 "/ /_/ /_  /   / /__ / /_/ /     _  /|  / _  /|  / / /_/ / _  /___\n"
+                 "__/ __ \\__________________ _    ___/ | / /__  | / /_  / / /__  ____/\n"
+                 "_/ / / /_  ___/  ___/  __ `/    __/  |/ /__   |/ /_  / / /__  __/\n"
+                 "/ /_/ /_  /   / /__ / /_/ /     _/ /|  / _  /|  / / /_/ / _  /___\n"
                  "\\____/ /_/    \\___/ \\__,_/      /_/ |_/  /_/ |_/  \\____/  /_____/\n";
 #if defined(ORCA_TIMESTAMP) && defined(ORCA_COMPILER)
     std::cout << "Orca NNUE (mono-accumulator 1x768 feature space i16 quantized eval with 64x scaling factor) compiled @ " << ORCA_TIMESTAMP << " on compiler " << ORCA_COMPILER << std::endl;
