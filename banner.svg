@@ -3,8 +3,8 @@
 
 <svg
    width="800"
-   height="400"
-   viewBox="0 0 211.66666 105.83333"
+   height="200"
+   viewBox="0 0 211.66666 52.916665"
    version="1.1"
    id="svg21"
    inkscape:export-filename="banner.png"
@@ -28,7 +28,7 @@
      inkscape:document-units="mm"
      showgrid="false"
      inkscape:zoom="0.74079554"
-     inkscape:cx="332.75038"
+     inkscape:cx="374.59729"
      inkscape:cy="145.11426"
      inkscape:window-width="1336"
      inkscape:window-height="689"
@@ -60,13 +60,13 @@
        xml:space="preserve"
        style="font-style:normal;font-weight:normal;font-size:10.5833px;line-height:1.25;font-family:sans-serif;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583;filter:url(#filter2416)"
        x="7.4979491"
-       y="66.701828"
+       y="40.2435"
        id="text252-7"><tspan
          sodipodi:role="line"
          id="tspan250-4"
          style="font-style:italic;font-variant:normal;font-weight:900;font-stretch:normal;font-size:38.8056px;font-family:Roboto;-inkscape-font-specification:'Roboto, Heavy Italic';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;stroke-width:0.264583"
          x="7.4979491"
-         y="66.701828"><tspan
+         y="40.2435"><tspan
    style="fill:#4287f5;fill-opacity:0.74902"
    id="tspan966-5">Orca</tspan> <tspan
    style="fill:#fcba03;fill-opacity:0.75"
@@ -75,13 +75,13 @@
        xml:space="preserve"
        style="font-style:normal;font-weight:normal;font-size:10.5833px;line-height:1.25;font-family:sans-serif;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
        x="9.2983789"
-       y="66.701828"
+       y="40.2435"
        id="text252"><tspan
          sodipodi:role="line"
          id="tspan250"
          style="font-style:italic;font-variant:normal;font-weight:900;font-stretch:normal;font-size:38.8056px;font-family:Roboto;-inkscape-font-specification:'Roboto, Heavy Italic';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;stroke-width:0.264583"
          x="9.2983789"
-         y="66.701828"><tspan
+         y="40.2435"><tspan
    style="fill:#4287f5;fill-opacity:1"
    id="tspan966">Orca</tspan> <tspan
    style="fill:#fcba03;fill-opacity:1"
