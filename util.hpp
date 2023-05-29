@@ -17,6 +17,8 @@ enum GameProgress {
     ENDGAME
 };
 
+float lerp(float a, float b, float t);
+
 GameProgress get_progress(int mv1, int mv2);
 
 template <Color Us>

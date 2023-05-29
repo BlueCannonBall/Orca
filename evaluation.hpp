@@ -12,8 +12,6 @@ constexpr int piece_values[NPIECE_TYPES] = {
     2000000 // KING
 };
 
-float lerp(float a, float b, float t);
-
 template <Color Us>
 int evaluate_basic(const Position& pos);
 

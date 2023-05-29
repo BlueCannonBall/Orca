@@ -2,6 +2,10 @@
 
 Logger logger("/tmp/orca.log", LogLevel::Info | LogLevel::Error);
 
+float lerp(float a, float b, float t) {
+    return a + t * (b - a);
+}
+
 GameProgress get_progress(int mv1, int mv2) {
     return (mv1 <= 1300 && mv2 <= 1300) ? ENDGAME : MIDGAME;
 }

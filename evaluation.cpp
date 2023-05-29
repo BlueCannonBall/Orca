@@ -4,10 +4,6 @@
 #include <cmath>
 #include <iostream>
 
-float lerp(float a, float b, float t) {
-    return a + t * (b - a);
-}
-
 template <Color Us>
 int evaluate_basic(const Position& pos) {
     int ret = 0;
