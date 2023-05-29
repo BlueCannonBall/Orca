@@ -20,14 +20,27 @@ int evaluate_basic(const Position& pos) {
 
 int evaluate_nn(const Position& pos) {
     float t = 1.f / (1.f + std::exp((-DYN_COLOR_CALL(evaluate_basic, pos.turn(), pos) + 15) / 2.f));
-    ProphetBoard prophet_board = generate_prophet_board(pos);
-    return lerp(prophet_sing_evaluation((Prophet*) pos.data, &prophet_board), DYN_COLOR_CALL(evaluate, pos.turn(), pos), t);
+    if (t < 0.05f) {
+        ProphetBoard prophet_board = generate_prophet_board(pos);
+        return prophet_sing_evaluation((Prophet*) pos.data, &prophet_board);
+    } else if (t > 0.95f) {
+        return DYN_COLOR_CALL(evaluate, pos.turn(), pos);
+    } else {
+        ProphetBoard prophet_board = generate_prophet_board(pos);
+        return lerp(prophet_sing_evaluation((Prophet*) pos.data, &prophet_board), DYN_COLOR_CALL(evaluate, pos.turn(), pos), t);
+    }
 }
 
 template <Color Us>
 int evaluate_nnue(const Position& pos) {
     float t = 1.f / (1.f + std::exp((-evaluate_basic<Us>(pos) + 15) / 2.f));
-    return lerp(prophet_utter_evaluation((Prophet*) pos.data, Us), evaluate<Us>(pos), t);
+    if (t < 0.05f) {
+        return prophet_utter_evaluation((Prophet*) pos.data, Us);
+    } else if (t > 0.95f) {
+        return DYN_COLOR_CALL(evaluate, pos.turn(), pos);
+    } else {
+        return lerp(prophet_utter_evaluation((Prophet*) pos.data, Us), evaluate<Us>(pos), t);
+    }
 }
 
 template <Color Us>
