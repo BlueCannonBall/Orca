@@ -27,7 +27,7 @@ int evaluate_nn(const Position& pos) {
         return DYN_COLOR_CALL(evaluate, pos.turn(), pos);
     } else {
         ProphetBoard prophet_board = generate_prophet_board(pos);
-        return lerp(prophet_sing_evaluation((Prophet*) pos.data, &prophet_board), DYN_COLOR_CALL(evaluate, pos.turn(), pos), t);
+        return std::round(lerp(prophet_sing_evaluation((Prophet*) pos.data, &prophet_board), DYN_COLOR_CALL(evaluate, pos.turn(), pos), t));
     }
 }
 
@@ -39,7 +39,7 @@ int evaluate_nnue(const Position& pos) {
     } else if (t > 0.95f) {
         return DYN_COLOR_CALL(evaluate, pos.turn(), pos);
     } else {
-        return lerp(prophet_utter_evaluation((Prophet*) pos.data, Us), evaluate<Us>(pos), t);
+        return std::round(lerp(prophet_utter_evaluation((Prophet*) pos.data, Us), evaluate<Us>(pos), t));
     }
 }
 
