@@ -4,6 +4,10 @@
 #include <cmath>
 #include <iostream>
 
+float lerp(float a, float b, float t) {
+    return a + t * (b - a);
+}
+
 template <Color Us>
 int evaluate_basic(const Position& pos) {
     int ret = 0;
@@ -15,21 +19,15 @@ int evaluate_basic(const Position& pos) {
 }
 
 int evaluate_nn(const Position& pos) {
-    if (std::abs(DYN_COLOR_CALL(evaluate_basic, pos.turn(), pos)) > 11) {
-        return DYN_COLOR_CALL(evaluate, pos.turn(), pos);
-    } else {
-        ProphetBoard prophet_board = generate_prophet_board(pos);
-        return prophet_sing_evaluation((Prophet*) pos.data, &prophet_board);
-    }
+    float t = 1.f / (1.f + std::exp((-DYN_COLOR_CALL(evaluate_basic, pos.turn(), pos) + 15) / 2.f));
+    ProphetBoard prophet_board = generate_prophet_board(pos);
+    return lerp(prophet_sing_evaluation((Prophet*) pos.data, &prophet_board), DYN_COLOR_CALL(evaluate, pos.turn(), pos), t);
 }
 
 template <Color Us>
 int evaluate_nnue(const Position& pos) {
-    if (std::abs(evaluate_basic<Us>(pos)) > 11) {
-        return evaluate<Us>(pos);
-    } else {
-        return prophet_utter_evaluation((Prophet*) pos.data, Us);
-    }
+    float t = 1.f / (1.f + std::exp((-evaluate_basic<Us>(pos) + 15) / 2.f));
+    return lerp(prophet_utter_evaluation((Prophet*) pos.data, Us), evaluate<Us>(pos), t);
 }
 
 template <Color Us>
