@@ -19,7 +19,7 @@ int evaluate_basic(const Position& pos) {
 }
 
 int evaluate_nn(const Position& pos) {
-    float t = 1.f / (1.f + std::exp((-std::abs(DYN_COLOR_CALL(evaluate_basic, pos.turn(), pos)) + 15) / 2.f));
+    float t = 1.f / (1.f + std::exp((-std::abs(DYN_COLOR_CALL(evaluate_basic, pos.turn(), pos) / 100.f) + 15.f) / 2.f));
     if (t < 0.05f) {
         ProphetBoard prophet_board = generate_prophet_board(pos);
         return prophet_sing_evaluation((Prophet*) pos.data, &prophet_board);
@@ -33,7 +33,7 @@ int evaluate_nn(const Position& pos) {
 
 template <Color Us>
 int evaluate_nnue(const Position& pos) {
-    float t = 1.f / (1.f + std::exp((-std::abs(evaluate_basic<Us>(pos)) + 15) / 2.f));
+    float t = 1.f / (1.f + std::exp((-std::abs(evaluate_basic<Us>(pos) / 100.f) + 15.f) / 2.f));
     if (t < 0.05f) {
         return prophet_utter_evaluation((Prophet*) pos.data, Us);
     } else if (t > 0.95f) {
