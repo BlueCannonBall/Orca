@@ -281,12 +281,12 @@ int Finder::quiesce(int alpha, int beta, int depth) {
     });
 
     for (const Move* move = moves; move != last_move; move++) {
-        if (!move->is_capture()) {
+        if (!move->is_capture() && !move->is_promotion()) {
             continue;
         }
 
         // Delta pruning
-        if ((!late_endgame) && move->flags() != EN_PASSANT && evaluation + piece_values[type_of(search.pos.at(move->to()))] + 200 < alpha) {
+        if (!late_endgame && !move->is_promotion() && move->flags() != EN_PASSANT && evaluation + piece_values[type_of(search.pos.at(move->to()))] + 200 < alpha) {
             continue;
         }
 
