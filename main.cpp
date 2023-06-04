@@ -121,7 +121,7 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                     RT::const_iterator entry_it;
                     DYN_COLOR_CALL(finder->search.pos.play, us, move);
                     static_evaluation = DYN_COLOR_CALL(evaluate_nnue, us, finder->search.pos);
-                    if ((entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && entry_it->second + 1 == 3) {
+                    if ((entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && entry_it->second + 1 >= 3) {
                         score = 0;
                     } else {
                         bool repetition = false;
@@ -130,18 +130,15 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                         for (Move* nested_move = nested_moves; nested_move != last_nested_move; nested_move++) {
                             RT::const_iterator nested_entry_it;
                             DYN_COLOR_CALL(finder->search.pos.play, ~us, *nested_move);
-                            if ((nested_entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && nested_entry_it->second + 1 == 3) {
+                            if ((nested_entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && nested_entry_it->second + 1 >= 3) {
                                 repetition = true;
                                 DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
                                 break;
                             }
                             DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
                         }
-                        if (repetition) {
-                            score = 0;
-                        } else {
-                            score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, -piece_values[KING], piece_values[KING], depth - 1);
-                        }
+
+                        score = std::min(repetition ? 0 : piece_values[KING], -DYN_COLOR_CALL(finder->alpha_beta, ~us, -piece_values[KING], piece_values[KING], depth - 1));
                     }
                     DYN_COLOR_CALL(finder->search.pos.undo, us, move);
 
@@ -192,13 +189,16 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
 
                     std::vector<std::string> args;
                     if (scored_move.value().score >= piece_values[KING] - NHISTORY) {
-                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string((piece_values[KING] - scored_move.value().score + 1) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string((piece_values[KING] - scored_move.value().score + 1) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps)};
                     } else if (scored_move.value().score <= -piece_values[KING] + NHISTORY) {
-                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string(-(scored_move.value().score + piece_values[KING]) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string(-(scored_move.value().score + piece_values[KING]) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps)};
                     } else {
-                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "cp", std::to_string(scored_move.value().score), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps), "pv"};
+                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "cp", std::to_string(scored_move.value().score), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps)};
                     }
-                    args.insert(args.end(), pv_strings.begin(), pv_strings.end());
+                    if (!pv_strings.empty()) {
+                        args.push_back("pv");
+                        args.insert(args.end(), pv_strings.begin(), pv_strings.end());
+                    }
                     uci::send_message("info", args);
                 }
             }
