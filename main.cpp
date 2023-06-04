@@ -124,21 +124,26 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
                     if ((entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && entry_it->second + 1 >= 3) {
                         score = 0;
                     } else {
-                        bool repetition = false;
-                        Move nested_moves[218];
-                        Move* last_nested_move = DYN_COLOR_CALL(finder->search.pos.generate_legals, ~us, nested_moves);
-                        for (Move* nested_move = nested_moves; nested_move != last_nested_move; nested_move++) {
-                            RT::const_iterator nested_entry_it;
-                            DYN_COLOR_CALL(finder->search.pos.play, ~us, *nested_move);
-                            if ((nested_entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && nested_entry_it->second + 1 >= 3) {
-                                repetition = true;
-                                DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
-                                break;
-                            }
-                            DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
-                        }
+                        score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, -piece_values[KING], piece_values[KING], depth - 1);
 
-                        score = std::min(repetition ? 0 : piece_values[KING], -DYN_COLOR_CALL(finder->alpha_beta, ~us, -piece_values[KING], piece_values[KING], depth - 1));
+                        if (score > 0) {
+                            bool repetition = false;
+                            Move nested_moves[218];
+                            Move* last_nested_move = DYN_COLOR_CALL(finder->search.pos.generate_legals, ~us, nested_moves);
+                            for (Move* nested_move = nested_moves; nested_move != last_nested_move; nested_move++) {
+                                RT::const_iterator nested_entry_it;
+                                DYN_COLOR_CALL(finder->search.pos.play, ~us, *nested_move);
+                                if ((nested_entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && nested_entry_it->second + 1 >= 3) {
+                                    repetition = true;
+                                    DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
+                                    break;
+                                }
+                                DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
+                            }
+                            if (repetition) {
+                                score = 0;
+                            }
+                        }
                     }
                     DYN_COLOR_CALL(finder->search.pos.undo, us, move);
 
