@@ -1,9 +1,7 @@
+#include "chess.hpp"
 #include "evaluation.hpp"
-#include "logger.hpp"
+#include "nnue.hpp"
 #include "search.hpp"
-#include "surge/src/position.h"
-#include "surge/src/types.h"
-#include "threadpool.hpp"
 #include "uci.hpp"
 #include "util.hpp"
 #include <boost/atomic.hpp>
@@ -13,25 +11,24 @@
 #include <chrono>
 #include <cmath>
 #include <functional>
-#include <map>
+#include <iostream>
+#include <memory>
 #include <prophet.h>
 #include <string>
 #include <vector>
 
 class ScoredMove {
 public:
-    Move move;
-    Finder* finder;
+    chess::Move move;
     int score;
     int static_evaluation;
 
-    ScoredMove(Move move, Finder* finder, int score, int static_evaluation):
+    ScoredMove(const chess::Move& move, int score, int static_evaluation):
         move(move),
-        finder(finder),
         score(score),
         static_evaluation(static_evaluation) {}
 
-    inline operator Move() const {
+    inline operator chess::Move() const {
         return this->move;
     }
 
@@ -60,150 +57,113 @@ public:
     }
 };
 
-void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bool>& stop) {
-    tp::ThreadPool pool;
-    boost::mutex mtx;
-    std::map<boost::thread::id, Prophet*> prophets;
-    Search search;
-    while (channel.pop(search) == boost::fibers::channel_op_status::success) {
-        if (search.quit) {
+void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::atomic<bool>& stop) {
+    Prophet* prophet = raise_prophet(nullptr);
+    SearchRequest search_req;
+    TT tt(32'000'000 / sizeof(TTEntry));
+    while (channel.pop(search_req) == boost::fibers::channel_op_status::success) {
+        if (search_req.quit) {
+            prophet_die_for_sins(prophet);
             return;
         }
 
         stop.store(false, boost::memory_order_relaxed);
+        tt.resize((search_req.hash_size * 1'000'000) / sizeof(TTEntry));
+        search_req.board.accept_prophet(prophet);
+        std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
+        const auto is_stopping = [start_time, &search_req, &stop](int starting_depth) {
+            return starting_depth > 1 && (std::chrono::steady_clock::now() - start_time > search_req.time || stop.load(boost::memory_order_relaxed));
+        };
 
-        Color us = search.pos.turn();
-        std::map<boost::thread::id, TT> tts;
-
-        Move moves[218];
-        Move* last_move = DYN_COLOR_CALL(search.pos.generate_legals, us, moves);
-        if (last_move - moves == 1) {
+        chess::Movelist moves;
+        chess::movegen::legalmoves(moves, search_req.board);
+        if (moves.empty()) {
+            logger.info("Invalid position given: " + search_req.board.getFen());
+            continue;
+        } else if (moves.size() == 1) {
             uci::bestmove(moves[0]);
             continue;
         }
 
-        std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
-        std::vector<Finder> finders(last_move - moves, Finder(start_time, search, stop));
-
-        const auto is_stopping = [start_time, &search, &stop](int depth) {
-            return depth > 1 && (std::chrono::steady_clock::now() - start_time > search.time || stop.load(boost::memory_order_relaxed));
-        };
-
-        Move best_move;
-        unsigned long long nodes = 0;
-        int max_game_ply = search.target_depth == -1 ? NHISTORY : (search.pos.game_ply + search.target_depth);
-
-        for (int depth = 1; !is_stopping(depth) && search.pos.game_ply + depth <= max_game_ply && depth <= 256; depth++) {
+        chess::Move best_move;
+        unsigned long long nodes = moves.size();
+        int seldepth = 0;
+        int max_ply = search_req.target_depth == -1 ? 1024 : (search_req.board.fullMoveNumber() + search_req.target_depth);
+        for (int depth = 1; !is_stopping(depth) && search_req.board.fullMoveNumber() + depth <= max_ply && depth <= 256; ++depth) {
+            SearchAgent agent(&tt);
+            SearchInfo info(depth, search_req.board.fullMoveNumber());
+            int alpha = -get_value(chess::PieceType::KING);
+            int beta = get_value(chess::PieceType::KING);
             std::vector<ScoredMove> scored_moves;
-            std::vector<std::shared_ptr<tp::Task>> tasks;
+            for (const auto& move : moves) {
+                search_req.board.makeMove(move);
+                int score = -agent.search(search_req.board, -beta, -alpha, info, is_stopping);
+                int static_evaluation = -evaluate_nnue(search_req.board);
+                search_req.board.unmakeMove(move);
 
-            for (Move* move_ptr = moves; move_ptr != last_move; move_ptr++) {
-                Move move = *move_ptr;
-                tasks.push_back(pool.schedule([&mtx, &prophets, us, &tts, depth, &scored_moves, move](void* data) {
-                    mtx.lock();
-                    Finder* finder = (Finder*) data;
-                    finder->starting_depth = depth;
-                    finder->seldepth = 0;
-                    finder->nodes = 0;
-                    finder->tt = &tts[boost::this_thread::get_id()];
+                if (is_stopping(depth)) {
+                    break;
+                }
 
-                    decltype(prophets)::iterator prophet_it;
-                    if ((prophet_it = prophets.find(boost::this_thread::get_id())) != prophets.end()) {
-                        finder->accept_prophet(prophet_it->second);
-                    } else {
-                        Prophet* new_prophet = raise_prophet(nullptr);
-                        prophets[boost::this_thread::get_id()] = new_prophet;
-                        finder->accept_prophet(new_prophet);
+                ++info.nodes;
+
+                if (search_req.multipv > 1) {
+                    scored_moves.emplace_back(move, score, static_evaluation);
+                } else {
+                    if (score >= beta) {
+                        alpha = beta;
+                        scored_moves = {ScoredMove(move, alpha, static_evaluation)};
+                        break;
                     }
-                    mtx.unlock();
 
-                    int score, static_evaluation;
-                    RT::const_iterator entry_it;
-                    DYN_COLOR_CALL(finder->search.pos.play, us, move);
-                    static_evaluation = DYN_COLOR_CALL(evaluate_nnue, us, finder->search.pos);
-                    if ((entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && entry_it->second + 1 >= 3) {
-                        score = 0;
-                    } else {
-                        score = -DYN_COLOR_CALL(finder->alpha_beta, ~us, -piece_values[KING], piece_values[KING], depth - 1);
-
-                        if (score > 0) {
-                            bool repetition = false;
-                            Move nested_moves[218];
-                            Move* last_nested_move = DYN_COLOR_CALL(finder->search.pos.generate_legals, ~us, nested_moves);
-                            for (Move* nested_move = nested_moves; nested_move != last_nested_move; nested_move++) {
-                                RT::const_iterator nested_entry_it;
-                                DYN_COLOR_CALL(finder->search.pos.play, ~us, *nested_move);
-                                if ((nested_entry_it = finder->search.rt.find(finder->search.pos.get_hash())) != finder->search.rt.end() && nested_entry_it->second + 1 >= 3) {
-                                    repetition = true;
-                                    DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
-                                    break;
-                                }
-                                DYN_COLOR_CALL(finder->search.pos.undo, ~us, *nested_move);
-                            }
-                            if (repetition) {
-                                score = 0;
-                            }
-                        }
+                    if (score > alpha) {
+                        alpha = score;
+                        scored_moves = {ScoredMove(move, alpha, static_evaluation)};
                     }
-                    DYN_COLOR_CALL(finder->search.pos.undo, us, move);
-
-                    if (!finder->is_stopping()) {
-                        mtx.lock();
-                        scored_moves.emplace_back(move, finder, score, static_evaluation);
-                        mtx.unlock();
-                    }
-                },
-                    &finders[move_ptr - moves]));
-            }
-
-            for (const auto& task : tasks) {
-                auto status = task->await();
-                if (status == tp::CommandStatus::Failure) {
-                    throw task->error;
                 }
             }
 
             if (!is_stopping(depth)) {
                 std::sort(scored_moves.begin(), scored_moves.end(), std::greater<ScoredMove>());
                 best_move = scored_moves[0].move;
-
-                nodes += last_move - moves;
-                int seldepth = 0;
-                for (const auto& finder : finders) {
-                    nodes += finder.nodes;
-                    if (finder.seldepth > seldepth) {
-                        seldepth = finder.seldepth;
-                    }
+                nodes += info.nodes;
+                if (seldepth < info.seldepth) {
+                    seldepth = info.seldepth;
                 }
 
                 std::chrono::milliseconds time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time);
                 unsigned long long nps = (nodes / std::max(time_elapsed.count(), 1l)) * 1000;
 
                 for (const auto& scored_move : scored_moves | boost::adaptors::indexed(1)) {
-                    if (scored_move.index() > search.multipv) {
+                    if (scored_move.index() > search_req.multipv) {
                         break;
                     }
 
-                    DYN_COLOR_CALL(search.pos.play, us, scored_move.value());
-                    std::vector<Move> pv = get_pv(search.pos, scored_move.value().finder->tt);
+                    search_req.board.makeMove(scored_move.value());
+                    std::vector<chess::Move> pv = get_pv(search_req.board, tt);
+                    search_req.board.unmakeMove(scored_move.value());
                     pv.insert(pv.begin(), scored_move.value());
-                    pv.resize(std::min((int) pv.size(), scored_move.value().finder->seldepth));
+                    pv.resize(std::min((int) pv.size(), seldepth));
+
                     std::vector<std::string> pv_strings;
-                    std::transform(pv.cbegin(), pv.cend(), std::back_inserter(pv_strings), uci::format_move);
-                    DYN_COLOR_CALL(search.pos.undo, us, scored_move.value());
+                    std::transform(pv.cbegin(), pv.cend(), std::back_inserter(pv_strings), [](const chess::Move& move) {
+                        return chess::uci::moveToUci(move);
+                    });
 
                     std::vector<std::string> args;
-                    if (scored_move.value().score >= piece_values[KING] - NHISTORY) {
-                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string((piece_values[KING] - scored_move.value().score + 1) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps)};
-                    } else if (scored_move.value().score <= -piece_values[KING] + NHISTORY) {
-                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string(-(scored_move.value().score + piece_values[KING]) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps)};
+                    if (scored_move.value().score >= get_value(chess::PieceType::KING) - 1024) {
+                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string((get_value(chess::PieceType::KING) - scored_move.value().score + 1) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps)};
+                    } else if (scored_move.value().score <= -get_value(chess::PieceType::KING) + 1024) {
+                        args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "mate", std::to_string(-(scored_move.value().score + get_value(chess::PieceType::KING)) / 2), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps)};
                     } else {
                         args = {"multipv", std::to_string(scored_move.index()), "depth", std::to_string(depth), "seldepth", std::to_string(seldepth), "score", "cp", std::to_string(scored_move.value().score), "nodes", std::to_string(nodes), "time", std::to_string(time_elapsed.count()), "nps", std::to_string(nps)};
                     }
+
                     if (!pv_strings.empty()) {
                         args.push_back("pv");
                         args.insert(args.end(), pv_strings.begin(), pv_strings.end());
                     }
+
                     uci::send_message("info", args);
                 }
             }
@@ -211,12 +171,10 @@ void worker(boost::fibers::unbuffered_channel<Search>& channel, boost::atomic<bo
 
         uci::bestmove(best_move);
     }
+    prophet_die_for_sins(prophet);
 }
 
 int main() {
-    initialise_all_databases();
-    zobrist::initialise_zobrist_keys();
-
     logger.info("Engine started");
 
     std::cout << "_______                         _____   ______   ______  ___________\n"
@@ -228,12 +186,12 @@ int main() {
     std::cout << "Orca NNUE (mono-accumulator 1x768 feature space i16 quantized eval with 64x scaling factor) compiled @ " << ORCA_TIMESTAMP << " on compiler " << ORCA_COMPILER << std::endl;
 #endif
 
-    Position pos(DEFAULT_FEN);
-    RT rt;
+    nnue::Board board(chess::STARTPOS);
     uint8_t multipv = 1;
+    uint32_t hash_size = 32;
 
     boost::atomic<bool> stop(false);
-    boost::fibers::unbuffered_channel<Search> channel;
+    boost::fibers::unbuffered_channel<SearchRequest> channel;
     boost::thread worker_thread(std::bind(worker, std::ref(channel), std::ref(stop)));
 
     for (;;) {
@@ -245,6 +203,7 @@ int main() {
                 uci::send_message("id", {"name", "Orca"});
                 uci::send_message("id", {"author", "BlueCannonBall"});
                 uci::send_message("option", {"name", "MultiPV", "type", "spin", "default", "1", "min", "1", "max", "255"});
+                uci::send_message("option", {"name", "Hash", "type", "spin", "default", "32", "min", "1", "max", "65535"});
                 uci::send_message("uciok");
                 break;
             }
@@ -263,56 +222,36 @@ int main() {
                         multipv = std::stoi(message.args[3]);
                         break;
                     }
+                    str_case("Hash"):
+                    {
+                        hash_size = std::stoi(message.args[3]);
+                        break;
+                    }
                 }
                 break;
             }
 
             str_case("position"):
             {
-                rt.clear();
                 if (message.args[0] == "startpos") {
-                    pos = Position(DEFAULT_FEN);
-                    rt[pos.get_hash()] = 1;
+                    board.setFen(chess::STARTPOS);
                     if (message.args.size() > 2) {
-                        for (size_t i = 2; i < message.args.size(); i++) {
-                            if (((i - 2) % 2) == 0) {
-                                pos.play<WHITE>(uci::parse_move<WHITE>(pos, message.args[i]));
-                            } else {
-                                pos.play<BLACK>(uci::parse_move<BLACK>(pos, message.args[i]));
-                            }
-
-                            RT::iterator entry_it;
-                            if ((entry_it = rt.find(pos.get_hash())) != rt.end()) {
-                                entry_it->second++;
-                            } else {
-                                rt[pos.get_hash()] = 1;
-                            }
+                        for (size_t i = 2; i < message.args.size(); ++i) {
+                            board.makeMove(chess::uci::uciToMove(board, message.args[i]));
                         }
                     }
                 } else if (message.args[0] == "fen") {
                     std::string fen;
-                    for (size_t i = 1; i < message.args.size(); i++) {
+                    for (size_t i = 1; i < message.args.size(); ++i) {
                         fen += message.args[i];
                         if (i + 1 != message.args.size()) {
                             fen.push_back(' ');
                         }
                     }
-                    pos = Position(fen);
-                    rt[pos.get_hash()] = 1;
+                    board.setFen(fen);
                     if (message.args.size() > 8) {
-                        for (size_t i = 8; i < message.args.size(); i++) {
-                            if (((i - 8) % 2) == 0) {
-                                pos.play<WHITE>(uci::parse_move<WHITE>(pos, message.args[i]));
-                            } else {
-                                pos.play<BLACK>(uci::parse_move<BLACK>(pos, message.args[i]));
-                            }
-
-                            RT::iterator entry_it;
-                            if ((entry_it = rt.find(pos.get_hash())) != rt.end()) {
-                                entry_it->second++;
-                            } else {
-                                rt[pos.get_hash()] = 1;
-                            }
+                        for (size_t i = 8; i < message.args.size(); ++i) {
+                            board.makeMove(chess::uci::uciToMove(board, message.args[i]));
                         }
                     }
                 }
@@ -332,31 +271,31 @@ int main() {
                 std::chrono::milliseconds binc = 0ms;
                 bool infinite = false;
                 int depth = -1;
-                for (auto it = message.args.begin(); it != message.args.end(); it++) {
+                for (auto it = message.args.begin(); it != message.args.end(); ++it) {
                     str_switch(*it) {
                         str_case("movetime"):
                         {
-                            movetime = std::chrono::milliseconds(stoi(*++it));
+                            movetime = std::chrono::milliseconds(std::stoi(*++it));
                             break;
                         }
                         str_case("wtime"):
                         {
-                            wtime = std::chrono::milliseconds(stoi(*++it));
+                            wtime = std::chrono::milliseconds(std::stoi(*++it));
                             break;
                         }
                         str_case("btime"):
                         {
-                            btime = std::chrono::milliseconds(stoi(*++it));
+                            btime = std::chrono::milliseconds(std::stoi(*++it));
                             break;
                         }
                         str_case("winc"):
                         {
-                            winc = std::chrono::milliseconds(stoi(*++it));
+                            winc = std::chrono::milliseconds(std::stoi(*++it));
                             break;
                         }
                         str_case("binc"):
                         {
-                            binc = std::chrono::milliseconds(stoi(*++it));
+                            binc = std::chrono::milliseconds(std::stoi(*++it));
                             break;
                         }
                         str_case("infinite"):
@@ -375,43 +314,35 @@ int main() {
                 if (infinite || depth != -1) {
                     search_time = 10h;
                 } else {
-                    float moves_made = std::floor(pos.game_ply / 2.f);
-                    int moves_left = 40;
-                    if (moves_made < 60.f) {
-                        moves_left = std::round(-0.5f * moves_made + 40.f);
-                    } else if ((float) pos.game_ply / 2.f >= 60.f) {
-                        moves_left = std::round(0.1f * (moves_made - 60.f) + 10.f);
-                    }
-
-                    if (pos.turn() == WHITE) {
+                    if (board.sideToMove() == chess::Color::WHITE) {
                         if (movetime != 0ms) {
                             search_time = movetime;
                         } else if (wtime != 0ms) {
-                            search_time = std::min(wtime / moves_left, 36000000ms); // Limit search to 10 hours
+                            search_time = wtime / 40;
                         }
 
-                        if (std::max(search_time - 250ms, 0ms) < winc) {
-                            search_time = winc - 250ms;
+                        if (search_time < winc) {
+                            search_time = winc;
                         }
-                    } else if (pos.turn() == BLACK) {
+                    } else if (board.sideToMove() == chess::Color::BLACK) {
                         if (movetime != 0ms) {
                             search_time = movetime;
                         } else if (btime != 0ms) {
-                            search_time = std::min(btime / moves_left, 36000000ms); // Limit search to 10 hours
+                            search_time = btime / 40;
                         }
 
-                        if (std::max(search_time - 250ms, 0ms) < binc) {
-                            search_time = binc - 250ms;
+                        if (search_time < binc) {
+                            search_time = binc;
                         }
                     } else {
                         throw std::logic_error("Invalid side to move");
                     }
                 }
 
-                channel.push(Search {
-                    .pos = pos,
-                    .rt = rt,
+                channel.push(SearchRequest {
+                    .board = board,
                     .multipv = multipv,
+                    .hash_size = hash_size,
                     .time = search_time,
                     .target_depth = depth,
                 });
@@ -428,7 +359,7 @@ int main() {
             str_case("quit"):
             {
                 stop.store(true, boost::memory_order_relaxed);
-                channel.push(Search {
+                channel.push(SearchRequest {
                     .quit = true,
                 });
                 worker_thread.join();
@@ -437,21 +368,23 @@ int main() {
 
             str_case("show"):
             {
-                std::cout << pos << std::endl;
+                std::cout << "Current board:" << std::endl;
+                std::cout << board << std::endl;
                 break;
             }
 
             str_case("eval"):
                 str_case("evaluate"):
             {
-                if (pos.turn() == WHITE) {
-                    uci::send_message("evaluation", {std::to_string(evaluate<WHITE>(pos, true))});
-                } else if (pos.turn() == BLACK) {
-                    uci::send_message("evaluation", {std::to_string(evaluate<BLACK>(pos, true))});
-                } else {
-                    throw std::logic_error("Invalid side to move");
-                }
+                int evaluation = evaluate(board, true);
+                std::cout << "HCE Evaluation: " << evaluation << std::endl;
                 break;
+            }
+
+            str_case("see"):
+            {
+                int evaluation = see(board, chess::uci::uciToMove(board, message.args[0]), true);
+                std::cout << "SEE Evaluation: " << evaluation << std::endl;
             }
         }
     }

@@ -34,6 +34,7 @@
 # Custom
 obj/
 orca
+orca_old
 compile_commands.json
 .cache/
 .clangd/

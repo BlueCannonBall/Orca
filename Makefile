@@ -1,10 +1,10 @@
 CXX = g++
-CXXFLAGS = -Wall -std=c++14 -Iprophet-nnue/nnue/include -Ofast -flto -march=native -mtune=native -pthread
+CXXFLAGS = -Wall -std=c++17 -Iprophet-nnue/nnue/include -Ofast -flto -march=native -mtune=native -pthread
 RUSTFLAGS = -C target-cpu=native
 LDLIBS = -lboost_thread -lboost_fiber -ldl -lbz2
 HEADERS = $(shell find . -name "*.h" -o -name "*.hpp")
 OBJDIR = obj
-OBJS = $(OBJDIR)/main.o $(OBJDIR)/position.o $(OBJDIR)/tables.o $(OBJDIR)/types.o $(OBJDIR)/util.o $(OBJDIR)/evaluation.o $(OBJDIR)/search.o
+OBJS = $(OBJDIR)/main.o $(OBJDIR)/util.o $(OBJDIR)/evaluation.o $(OBJDIR)/search.o $(OBJDIR)/nnue.o
 TARGET = orca
 PREFIX = /usr/local
 
@@ -18,18 +18,6 @@ $(OBJDIR)/main.o: main.cpp $(HEADERS)
 prophet-nnue/target/release/libprophet.a: prophet-nnue/nnue/Cargo.toml $(shell find prophet-nnue/nnue/src -name "*.rs") prophet-nnue/nnue/nnue.npz
 	cd prophet-nnue/nnue && RUSTFLAGS="$(RUSTFLAGS)" cargo build --release
 
-$(OBJDIR)/position.o: surge/src/position.cpp surge/src/*.h
-	mkdir -p $(OBJDIR)
-	$(CXX) -c $< $(CXXFLAGS) -o $@
-
-$(OBJDIR)/tables.o: surge/src/tables.cpp surge/src/*.h
-	mkdir -p $(OBJDIR)
-	$(CXX) -c $< $(CXXFLAGS) -o $@
-
-$(OBJDIR)/types.o: surge/src/types.cpp surge/src/*.h
-	mkdir -p $(OBJDIR)
-	$(CXX) -c $< $(CXXFLAGS) -o $@
-
 $(OBJDIR)/util.o: util.cpp $(HEADERS)
 	mkdir -p $(OBJDIR)
 	$(CXX) -c $< $(CXXFLAGS) -o $@
@@ -42,7 +30,11 @@ $(OBJDIR)/search.o: search.cpp $(HEADERS)
 	mkdir -p $(OBJDIR)
 	$(CXX) -c $< $(CXXFLAGS) -o $@
 
-.PHONY: clean install
+$(OBJDIR)/nnue.o: nnue.cpp $(HEADERS)
+	mkdir -p $(OBJDIR)
+	$(CXX) -c $< $(CXXFLAGS) -o $@
+
+.PHONY: clean install age
 
 clean:
 	rm -rf $(TARGET) $(OBJDIR)
@@ -50,3 +42,6 @@ clean:
 
 install:
 	cp $(TARGET) $(PREFIX)/bin/
+
+age:
+	mv $(TARGET) $(TARGET)_old

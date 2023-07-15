@@ -3,51 +3,36 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <stdexcept>
 
-template <Color Us>
-int evaluate_basic(const Position& pos) {
+ADD_BASE_OPERATORS_FOR(chess::Rank);
+ADD_BASE_OPERATORS_FOR(chess::File);
+
+ADD_INCR_OPERATORS_FOR(chess::Rank);
+ADD_INCR_OPERATORS_FOR(chess::File);
+ADD_INCR_OPERATORS_FOR(chess::PieceType);
+
+int evaluate_basic(const chess::Board& board) {
     int ret = 0;
-    for (PieceType i = PAWN; i < NPIECE_TYPES - 1; ++i) {
-        ret += pop_count(pos.bitboard_of(Us, i)) * piece_values[i];
-        ret -= pop_count(pos.bitboard_of(~Us, i)) * piece_values[i];
+    for (chess::PieceType pt = chess::PieceType::PAWN; pt <= chess::PieceType::QUEEN; ++pt) {
+        ret += chess::builtin::popcount(board.pieces(pt, board.sideToMove())) * get_value(pt);
+        ret -= chess::builtin::popcount(board.pieces(pt, ~board.sideToMove())) * get_value(pt);
     }
     return ret;
 }
 
-int evaluate_nn(const Position& pos) {
-    float t = 1.f / (1.f + std::exp((-std::abs(DYN_COLOR_CALL(evaluate_basic, pos.turn(), pos) / 100.f) + 15.f) / 2.f));
-    if (t < 0.05f) {
-        ProphetBoard prophet_board = generate_prophet_board(pos);
-        return prophet_sing_evaluation((Prophet*) pos.data, &prophet_board);
-    } else if (t > 0.95f) {
-        return DYN_COLOR_CALL(evaluate, pos.turn(), pos);
-    } else {
-        ProphetBoard prophet_board = generate_prophet_board(pos);
-        return std::round(lerp(prophet_sing_evaluation((Prophet*) pos.data, &prophet_board), DYN_COLOR_CALL(evaluate, pos.turn(), pos), t));
-    }
+int evaluate_nnue(const nnue::Board& board) {
+    return prophet_utter_evaluation(board.get_prophet(), (uint8_t) board.sideToMove());
 }
 
-template <Color Us>
-int evaluate_nnue(const Position& pos) {
-    float t = 1.f / (1.f + std::exp((-std::abs(evaluate_basic<Us>(pos) / 100.f) + 15.f) / 2.f));
-    if (t < 0.05f) {
-        return prophet_utter_evaluation((Prophet*) pos.data, Us);
-    } else if (t > 0.95f) {
-        return DYN_COLOR_CALL(evaluate, pos.turn(), pos);
-    } else {
-        return std::round(lerp(prophet_utter_evaluation((Prophet*) pos.data, Us), evaluate<Us>(pos), t));
-    }
-}
-
-template <Color Us>
-int evaluate(const Position& pos, bool debug) {
+int evaluate(const chess::Board& board, bool debug) {
     // Material value
     int mv = 0;
     int our_mv = 0;
     int their_mv = 0;
-    for (PieceType i = PAWN; i < NPIECE_TYPES - 1; ++i) {
-        our_mv += pop_count(pos.bitboard_of(Us, i)) * piece_values[i];
-        their_mv += pop_count(pos.bitboard_of(~Us, i)) * piece_values[i];
+    for (chess::PieceType pt = chess::PieceType::PAWN; pt <= chess::PieceType::QUEEN; ++pt) {
+        our_mv += chess::builtin::popcount(board.pieces(pt, board.sideToMove())) * get_value(pt);
+        their_mv += chess::builtin::popcount(board.pieces(pt, ~board.sideToMove())) * get_value(pt);
     }
     mv += our_mv;
     mv -= their_mv;
@@ -56,32 +41,36 @@ int evaluate(const Position& pos, bool debug) {
     // Color advantage
     int ca = 0;
     if (progress == MIDGAME) {
-        ca = (Us == WHITE) ? 15 : -15;
+        ca = (board.sideToMove() == chess::Color::WHITE) ? 15 : -15;
     }
 
     // Center control
     int cc = 0;
-    if (pos.at(d5) != NO_PIECE) cc += (color_of(pos.at(d5)) == Us) ? 25 : -25;
-    if (pos.at(e5) != NO_PIECE) cc += (color_of(pos.at(e5)) == Us) ? 25 : -25;
-    if (pos.at(d4) != NO_PIECE) cc += (color_of(pos.at(d4)) == Us) ? 25 : -25;
-    if (pos.at(e4) != NO_PIECE) cc += (color_of(pos.at(e4)) == Us) ? 25 : -25;
+    if (board.at(chess::SQ_D5) != chess::Piece::NONE) cc += (board.color(board.at(chess::SQ_D5)) == board.sideToMove()) ? 25 : -25;
+    if (board.at(chess::SQ_E5) != chess::Piece::NONE) cc += (board.color(board.at(chess::SQ_E5)) == board.sideToMove()) ? 25 : -25;
+    if (board.at(chess::SQ_D4) != chess::Piece::NONE) cc += (board.color(board.at(chess::SQ_D4)) == board.sideToMove()) ? 25 : -25;
+    if (board.at(chess::SQ_E4) != chess::Piece::NONE) cc += (board.color(board.at(chess::SQ_E4)) == board.sideToMove()) ? 25 : -25;
 
     // Knight placement
-    const static Bitboard edges_mask = MASK_FILE[AFILE] | MASK_RANK[RANK1] | MASK_FILE[HFILE] | MASK_RANK[RANK8];
+    static constexpr chess::Bitboard edges_mask =
+        chess::movegen::MASK_FILE[(int) chess::File::FILE_A] |
+        chess::movegen::MASK_RANK[(int) chess::Rank::RANK_1] |
+        chess::movegen::MASK_FILE[(int) chess::File::FILE_H] |
+        chess::movegen::MASK_RANK[(int) chess::Rank::RANK_8];
     int np = 0;
-    np -= pop_count(pos.bitboard_of(Us, KNIGHT) & edges_mask) * 50;
-    np += pop_count(pos.bitboard_of(~Us, KNIGHT) & edges_mask) * 50;
+    np -= chess::builtin::popcount(board.pieces(chess::PieceType::KNIGHT, board.sideToMove()) & edges_mask) * 50;
+    np += chess::builtin::popcount(board.pieces(chess::PieceType::KNIGHT, ~board.sideToMove()) & edges_mask) * 50;
 
     // Bishop placement
-    static constexpr Bitboard black_squares = 0xAA55AA55AA55AA55;
+    static constexpr chess::Bitboard black_squares = 0xAA55AA55AA55AA55;
     int bp = 0;
-    for (Color color = WHITE; color < NCOLORS; ++color) {
+    BOTH_COLORS {
         unsigned short white_square_count = 0;
         unsigned short black_square_count = 0;
 
-        Bitboard bishops = pos.bitboard_of(color, BISHOP);
+        chess::Bitboard bishops = board.pieces(chess::PieceType::BISHOP, color);
         while (bishops) {
-            Square bishop = pop_lsb(&bishops);
+            chess::Square bishop = chess::builtin::poplsb(bishops);
 
             if ((black_squares >> bishop) & 1) {
                 black_square_count++;
@@ -90,7 +79,7 @@ int evaluate(const Position& pos, bool debug) {
             }
 
             if (white_square_count && black_square_count) {
-                bp += color == Us ? 50 : -50;
+                bp += color == board.sideToMove() ? 50 : -50;
                 break;
             }
         }
@@ -98,8 +87,8 @@ int evaluate(const Position& pos, bool debug) {
 
     // Rook placement
     int rp = 0;
-    rp += pop_count(pos.bitboard_of(Us, ROOK) & MASK_RANK[Us == WHITE ? RANK7 : RANK2]) * 30;
-    rp -= pop_count(pos.bitboard_of(~Us, ROOK) & MASK_RANK[~Us == WHITE ? RANK7 : RANK2]) * 30;
+    rp += chess::builtin::popcount(board.pieces(chess::PieceType::ROOK, board.sideToMove()) & chess::movegen::MASK_RANK[(int) (board.sideToMove() == chess::Color::WHITE ? chess::Rank::RANK_7 : chess::Rank::RANK_2)]) * 30;
+    rp -= chess::builtin::popcount(board.pieces(chess::PieceType::ROOK, ~board.sideToMove()) & chess::movegen::MASK_RANK[(int) (~board.sideToMove() == chess::Color::WHITE ? chess::Rank::RANK_7 : chess::Rank::RANK_2)]) * 30;
 
     // King placement
     /*
@@ -108,8 +97,8 @@ int evaluate(const Position& pos, bool debug) {
     }
 
     let table = [];
-    for (let y = 7; y > -1; y--) {
-        for (let x = 0; x < 8; x++) {
+    for (let y = 7; y > -1; --y) {
+        for (let x = 0; x < 8; ++x) {
             table.push(Math.round(distance(x, y, 3.5, 3.5) * 20));
         }
     }
@@ -122,57 +111,57 @@ int evaluate(const Position& pos, bool debug) {
     static constexpr int king_pcsq_table[64] = {71, 86, 76, 71, 71, 76, 86, 71, 86, 71, 58, 51, 51, 58, 71, 86, 76, 58, 42, 32, 32, 42, 58, 76, 71, 51, 32, 14, 14, 32, 51, 71, 71, 51, 32, 14, 14, 32, 51, 71, 76, 58, 42, 32, 32, 42, 58, 76, 86, 71, 58, 51, 51, 58, 71, 86, 71, 86, 76, 71, 71, 76, 86, 71};
     int kp = 0;
     if (progress == MIDGAME) {
-        kp += king_pcsq_table[bsf(pos.bitboard_of(Us, KING))];
-        kp -= king_pcsq_table[bsf(pos.bitboard_of(~Us, KING))];
+        kp += king_pcsq_table[board.kingSq(board.sideToMove())];
+        kp -= king_pcsq_table[board.kingSq(~board.sideToMove())];
     }
 
     // Doubled pawns
     int dp = 0;
-    for (File file = AFILE; file < NFILES; ++file) {
-        dp -= std::max(pop_count(pos.bitboard_of(Us, PAWN) & MASK_FILE[file]) - 1, 0) * 75;
-        dp += std::max(pop_count(pos.bitboard_of(~Us, PAWN) & MASK_FILE[file]) - 1, 0) * 75;
+    for (chess::File file = chess::File::FILE_A; file <= chess::File::FILE_H; ++file) {
+        dp -= std::max(chess::builtin::popcount(board.pieces(chess::PieceType::PAWN, board.sideToMove()) & chess::movegen::MASK_FILE[(int) file]) - 1, 0) * 75;
+        dp += std::max(chess::builtin::popcount(board.pieces(chess::PieceType::PAWN, ~board.sideToMove()) & chess::movegen::MASK_FILE[(int) file]) - 1, 0) * 75;
     }
 
     // Passed pawns
     int pp = 0;
-    for (Color color = WHITE; color < NCOLORS; ++color) {
-        Bitboard pawns = pos.bitboard_of(color, PAWN);
+    BOTH_COLORS {
+        chess::Bitboard pawns = board.pieces(chess::PieceType::PAWN, color);
         while (pawns) {
-            Square sq = pop_lsb(&pawns);
+            chess::Square sq = chess::builtin::poplsb(pawns);
 
-            Bitboard pawns_ahead_mask = MASK_FILE[file_of(sq)];
-            if (file_of(sq) > AFILE) {
-                pawns_ahead_mask |= MASK_FILE[file_of(sq) - 1];
+            chess::Bitboard pawns_ahead_mask = chess::movegen::MASK_FILE[(int) chess::utils::squareFile(sq)];
+            if (chess::utils::squareFile(sq) > chess::File::FILE_A) {
+                pawns_ahead_mask |= chess::movegen::MASK_FILE[(int) chess::utils::squareFile(sq) - 1];
             }
-            if (file_of(sq) < HFILE) {
-                pawns_ahead_mask |= MASK_FILE[file_of(sq) + 1];
+            if (chess::utils::squareFile(sq) < chess::File::FILE_H) {
+                pawns_ahead_mask |= chess::movegen::MASK_FILE[(int) chess::utils::squareFile(sq) + 1];
             }
 
-            if (color == WHITE) {
-                for (Rank rank = RANK1; rank <= rank_of(sq); ++rank) {
-                    pawns_ahead_mask &= ~MASK_RANK[rank];
+            if (color == chess::Color::WHITE) {
+                for (chess::Rank rank = chess::Rank::RANK_1; rank <= chess::utils::squareRank(sq); ++rank) {
+                    pawns_ahead_mask &= ~chess::movegen::MASK_RANK[(int) rank];
                 }
-            } else if (color == BLACK) {
-                for (Rank rank = RANK8; rank >= rank_of(sq); --rank) {
-                    pawns_ahead_mask &= ~MASK_RANK[rank];
+            } else if (color == chess::Color::BLACK) {
+                for (chess::Rank rank = chess::Rank::RANK_8; rank >= chess::utils::squareRank(sq); --rank) {
+                    pawns_ahead_mask &= ~chess::movegen::MASK_RANK[(int) rank];
                 }
             } else {
                 throw std::logic_error("Invalid color");
             }
 
-            if (!(pos.bitboard_of(~color, PAWN) & pawns_ahead_mask)) {
+            if (!(board.pieces(chess::PieceType::PAWN, ~color) & pawns_ahead_mask)) {
                 if (progress == MIDGAME) {
-                    pp += color == Us ? 30 : -30;
+                    pp += color == board.sideToMove() ? 30 : -30;
                 } else if (progress == ENDGAME) {
                     int score = 0;
-                    if (color == WHITE) {
-                        score = (rank_of(sq) - RANK1) * 50;
-                    } else if (color == BLACK) {
-                        score = (RANK8 - rank_of(sq)) * 50;
+                    if (color == chess::Color::WHITE) {
+                        score = (int) (chess::utils::squareRank(sq) - (int) chess::Rank::RANK_1) * 50;
+                    } else if (color == chess::Color::BLACK) {
+                        score = (int) (chess::Rank::RANK_8 - (int) chess::utils::squareRank(sq)) * 50;
                     } else {
                         throw std::logic_error("Invalid color");
                     }
-                    pp += color == Us ? score : -score;
+                    pp += color == board.sideToMove() ? score : -score;
                 } else {
                     throw std::logic_error("Invalid game progress");
                 }
@@ -183,21 +172,21 @@ int evaluate(const Position& pos, bool debug) {
     // Isolated pawns
     int ip = 0;
     if (progress == MIDGAME) {
-        for (Color color = WHITE; color < NCOLORS; ++color) {
-            Bitboard pawns = pos.bitboard_of(color, PAWN);
+        BOTH_COLORS {
+            chess::Bitboard pawns = board.pieces(chess::PieceType::PAWN, color);
             while (pawns) {
-                Square sq = pop_lsb(&pawns);
+                chess::Square sq = chess::builtin::poplsb(pawns);
 
-                Bitboard buddies_mask = 0;
-                if (file_of(sq) > AFILE) {
-                    buddies_mask |= MASK_FILE[file_of(sq) - 1];
+                chess::Bitboard buddies_mask = 0;
+                if (chess::utils::squareFile(sq) > chess::File::FILE_A) {
+                    buddies_mask |= chess::movegen::MASK_FILE[(int) chess::utils::squareFile(sq) - 1];
                 }
-                if (file_of(sq) < HFILE) {
-                    buddies_mask |= MASK_FILE[file_of(sq) + 1];
+                if (chess::utils::squareFile(sq) < chess::File::FILE_H) {
+                    buddies_mask |= chess::movegen::MASK_FILE[(int) chess::utils::squareFile(sq) + 1];
                 }
 
-                if (!(pos.bitboard_of(color, PAWN) & buddies_mask)) {
-                    ip += color == Us ? -15 : 15;
+                if (!(board.pieces(chess::PieceType::PAWN, color) & buddies_mask)) {
+                    ip += color == board.sideToMove() ? -15 : 15;
                 }
             }
         }
@@ -205,108 +194,114 @@ int evaluate(const Position& pos, bool debug) {
 
     // Open files
     int of = 0;
-    for (Color color = WHITE; color < NCOLORS; ++color) {
-        Bitboard rooks = pos.bitboard_of(color, ROOK);
+    BOTH_COLORS {
+        chess::Bitboard rooks = board.pieces(chess::PieceType::ROOK, color);
         while (rooks) {
-            Square sq = pop_lsb(&rooks);
-            File file = file_of(sq);
+            chess::Square sq = chess::builtin::poplsb(rooks);
+            chess::File file = chess::utils::squareFile(sq);
 
-            Bitboard pawns[NCOLORS] = {
-                pos.bitboard_of(WHITE_PAWN) & MASK_FILE[file],
-                pos.bitboard_of(BLACK_PAWN) & MASK_FILE[file],
+            chess::Bitboard pawns[2] = {
+                board.pieces(chess::PieceType::PAWN, chess::Color::WHITE) & chess::movegen::MASK_FILE[(int) file],
+                board.pieces(chess::PieceType::PAWN, chess::Color::BLACK) & chess::movegen::MASK_FILE[(int) file],
             };
 
-            if (pawns[~color]) {
-                of += color == Us ? -5 : 5; // File is half-open
-                if (pawns[color]) {
-                    of += color == Us ? -5 : 5; // File is closed
+            if (pawns[(uint8_t) ~color]) {
+                of += color == board.sideToMove() ? -5 : 5; // File is half-open
+                if (pawns[(uint8_t) color]) {
+                    of += color == board.sideToMove() ? -5 : 5; // File is closed
                 }
             }
         }
     }
 
-    // Check status
-    int cs = 0;
-    if (pos.in_check<Us>()) {
-        cs = -20;
-    } else if (pos.in_check<~Us>()) {
-        cs = 20;
-    }
-
     // Sum up various scores
     if (debug) {
-        std::cerr << "info string material value " << mv << std::endl;
-        std::cerr << "info string color advantage " << ca << std::endl;
-        std::cerr << "info string center control " << cc << std::endl;
-        std::cerr << "info string knight placement " << np << std::endl;
-        std::cerr << "info string bishop placement " << bp << std::endl;
-        std::cerr << "info string rook placement " << rp << std::endl;
-        std::cerr << "info string king placement " << kp << std::endl;
-        std::cerr << "info string doubled pawns " << dp << std::endl;
-        std::cerr << "info string passed pawns " << pp << std::endl;
-        std::cerr << "info string isolated pawns " << ip << std::endl;
-        std::cerr << "info string open files " << of << std::endl;
-        std::cerr << "info string check status " << cs << std::endl;
+        std::cerr << "Material value " << mv << std::endl;
+        std::cerr << "Color advantage " << ca << std::endl;
+        std::cerr << "Center control " << cc << std::endl;
+        std::cerr << "Knight placement " << np << std::endl;
+        std::cerr << "Bishop placement " << bp << std::endl;
+        std::cerr << "Rook placement " << rp << std::endl;
+        std::cerr << "King placement " << kp << std::endl;
+        std::cerr << "Doubled pawns " << dp << std::endl;
+        std::cerr << "Passed pawns " << pp << std::endl;
+        std::cerr << "Isolated pawns " << ip << std::endl;
+        std::cerr << "Open files " << of << std::endl;
     }
-    return mv + ca + cc + np + bp + rp + kp + dp + pp + ip + of + cs;
+    return mv + ca + cc + np + bp + rp + kp + dp + pp + ip + of;
 }
 
-template <Color Us>
-int see(const Position& pos, Move move) {
-    const Square attacked_sq = move.to();
-    Bitboard occ = BOTH_COLOR_CALL(pos.all_pieces);
-    Bitboard attackers = BOTH_COLOR_CALL(pos.attackers_from, attacked_sq, occ);
-    Bitboard diagonal_sliders = BOTH_COLOR_CALL(pos.diagonal_sliders);
-    Bitboard orthogonal_sliders = BOTH_COLOR_CALL(pos.orthogonal_sliders);
+int see(const chess::Board& board, const chess::Move& move, bool debug) {
+    assert(move.typeOf() != chess::Move::PROMOTION && move.typeOf() != chess::Move::ENPASSANT);
+
+    const chess::Square attacked_sq = move.to();
+    chess::Bitboard occ = board.occ();
+    chess::Bitboard attackers = attackers_for_side(board, attacked_sq, chess::Color::WHITE, occ) |
+                                attackers_for_side(board, attacked_sq, chess::Color::BLACK, occ);
+    chess::Bitboard diagonal_sliders = board.pieces(chess::PieceType::BISHOP) | board.pieces(chess::PieceType::QUEEN);
+    chess::Bitboard orthogonal_sliders = board.pieces(chess::PieceType::ROOK) | board.pieces(chess::PieceType::QUEEN);
 
     int ret = 0;
-    PieceType attacked_pc;
+    chess::PieceType attacked_pt;
 
     {
-        const Square attacker_sq = move.from();
-        const PieceType attacker_pc = type_of(pos.at(attacker_sq));
+        const chess::Square attacker_sq = move.from();
+        const chess::PieceType attacker_pt = chess::utils::typeOfPiece(board.at(attacker_sq));
 
-        occ &= ~SQUARE_BB[attacker_sq];
-        attackers &= ~SQUARE_BB[attacker_sq];
-        attacked_pc = attacker_pc;
+        occ &= ~(1ULL << attacker_sq);
+        attackers &= ~(1ULL << attacker_sq);
+        attacked_pt = attacker_pt;
 
-        if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
-            diagonal_sliders &= ~SQUARE_BB[attacker_sq];
-            attackers |= attacks<BISHOP>(attacked_sq, occ) & diagonal_sliders;
+        if (attacker_pt == chess::PieceType::PAWN ||
+            attacker_pt == chess::PieceType::BISHOP ||
+            attacker_pt == chess::PieceType::QUEEN) {
+            diagonal_sliders &= ~(1ULL << attacker_sq);
+            attackers |= chess::movegen::attacks::bishop(attacked_sq, occ) & diagonal_sliders;
         }
-        if (attacker_pc == ROOK || attacker_pc == QUEEN) {
-            orthogonal_sliders &= ~SQUARE_BB[attacker_sq];
-            attackers |= attacks<ROOK>(attacked_sq, occ) & orthogonal_sliders;
+        if (attacker_pt == chess::PieceType::PAWN ||
+            attacker_pt == chess::PieceType::ROOK ||
+            attacker_pt == chess::PieceType::QUEEN) {
+            orthogonal_sliders &= ~(1ULL << attacker_sq);
+            attackers |= chess::movegen::attacks::rook(attacked_sq, occ) & orthogonal_sliders;
         }
     }
 
-    if (move.is_capture()) {
-        ret += piece_values[type_of(pos.at(attacked_sq))];
+    if (board.at(move.to()) != chess::Piece::NONE) {
+        ret += get_value(chess::utils::typeOfPiece(board.at(attacked_sq)));
+        if (debug) std::cout << "S1 starts by gaining " << get_value(chess::utils::typeOfPiece(board.at(attacked_sq))) << std::endl;
     }
 
-    for (Color side_to_play = ~Us;; side_to_play = ~side_to_play) {
+    for (chess::Color side_to_move = ~board.sideToMove();; side_to_move = ~side_to_move) {
         bool attacked = false;
-        for (PieceType attacker_pc = PAWN; attacker_pc < NPIECE_TYPES; ++attacker_pc) {
-            Bitboard attacker = attackers & pos.bitboard_of(side_to_play, attacker_pc);
+        for (chess::PieceType attacker_pt = chess::PieceType::PAWN; attacker_pt <= chess::PieceType::KING; ++attacker_pt) {
+            chess::Bitboard attacker = attackers & board.pieces(attacker_pt, side_to_move);
             if (attacker) {
-                if (attacker_pc == KING && (attackers & DYN_COLOR_CALL(pos.all_pieces, ~side_to_play))) {
+                if (attacker_pt == chess::PieceType::KING && (attackers & board.them(~side_to_move))) {
                     break;
                 }
 
-                ret += side_to_play == Us ? piece_values[attacked_pc] : -piece_values[attacked_pc];
-
-                const Square attacker_sq = bsf(attacker);
-                occ &= ~SQUARE_BB[attacker_sq];
-                attackers &= ~SQUARE_BB[attacker_sq];
-                attacked_pc = attacker_pc;
-
-                if (attacker_pc == PAWN || attacker_pc == BISHOP || attacker_pc == QUEEN) {
-                    diagonal_sliders &= ~SQUARE_BB[attacker_sq];
-                    attackers |= attacks<BISHOP>(attacked_sq, occ) & diagonal_sliders;
+                ret += side_to_move == board.sideToMove() ? get_value(attacked_pt) : -get_value(attacked_pt);
+                if (debug) {
+                    std::cout << (side_to_move == board.sideToMove() ? "S1" : "S2") << " gains " << get_value(attacked_pt) << std::endl;
+                    std::cout << "Net gains for S1: " << ret << std::endl;
                 }
-                if (attacker_pc == ROOK || attacker_pc == QUEEN) {
-                    orthogonal_sliders &= ~SQUARE_BB[attacker_sq];
-                    attackers |= attacks<ROOK>(attacked_sq, occ) & orthogonal_sliders;
+
+                const chess::Square attacker_sq = chess::builtin::lsb(attacker);
+                occ &= ~(1ULL << attacker_sq);
+                attackers &= ~(1ULL << attacker_sq);
+                attacked_pt = attacker_pt;
+
+                if (attacker_pt == chess::PieceType::PAWN ||
+                    attacker_pt == chess::PieceType::BISHOP ||
+                    attacker_pt == chess::PieceType::QUEEN) {
+                    diagonal_sliders &= ~(1ULL << attacker_sq);
+                    attackers |= chess::movegen::attacks::bishop(attacked_sq, occ) & diagonal_sliders;
+                }
+                if (attacker_pt == chess::PieceType::PAWN ||
+                    attacker_pt == chess::PieceType::ROOK ||
+                    attacker_pt == chess::PieceType::QUEEN) {
+                    orthogonal_sliders &= ~(1ULL << attacker_sq);
+                    attackers |= chess::movegen::attacks::rook(attacked_sq, occ) & orthogonal_sliders;
                 }
 
                 attacked = true;
@@ -321,10 +316,8 @@ int see(const Position& pos, Move move) {
     return ret;
 }
 
-int mvv_lva(const Position& pos, Move move) {
-    assert(move.is_capture());
-
-    static constexpr int scores[NPIECE_TYPES * NPIECE_TYPES] = {
+int mvv_lva(const chess::Board& board, const chess::Move& move) {
+    static constexpr int scores[] = {
         105,
         104,
         103,
@@ -363,21 +356,11 @@ int mvv_lva(const Position& pos, Move move) {
         600,
     };
 
-    if (move.flags() == EN_PASSANT) {
-        return scores[PAWN * NPIECE_TYPES + PAWN];
+    if (move.typeOf() == chess::Move::ENPASSANT) {
+        return scores[(uint8_t) chess::PieceType::PAWN * 6 + (uint8_t) chess::PieceType::PAWN];
+    } else if (board.at(move.to()) != chess::Piece::NONE) {
+        return scores[(uint8_t) chess::utils::typeOfPiece(board.at(move.to())) * 6 + (uint8_t) chess::utils::typeOfPiece(board.at(move.from()))];
     } else {
-        return scores[type_of(pos.at(move.to())) * NPIECE_TYPES + type_of(pos.at(move.from()))];
+        throw std::invalid_argument("Move must be a capture");
     }
 }
-
-template int evaluate_basic<WHITE>(const Position& pos);
-template int evaluate_basic<BLACK>(const Position& pos);
-
-template int evaluate_nnue<WHITE>(const Position& pos);
-template int evaluate_nnue<BLACK>(const Position& pos);
-
-template int evaluate<WHITE>(const Position& pos, bool debug);
-template int evaluate<BLACK>(const Position& pos, bool debug);
-
-template int see<WHITE>(const Position& pos, Move move);
-template int see<BLACK>(const Position& pos, Move move);

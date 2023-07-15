@@ -1,118 +1,38 @@
 #include "util.hpp"
 
-Logger logger("/tmp/orca.log", LogLevel::Info | LogLevel::Error);
+ADD_INCR_OPERATORS_FOR(chess::PieceType);
 
-float lerp(float a, float b, float t) {
-    return a + t * (b - a);
-}
+Logger logger("/tmp/orca.log", LogLevel::Info | LogLevel::Error);
 
 GameProgress get_progress(int mv1, int mv2) {
     return (mv1 <= 1300 && mv2 <= 1300) ? ENDGAME : MIDGAME;
 }
 
-template <Color Us>
-bool has_non_pawn_material(const Position& pos) {
-    for (PieceType i = KNIGHT; i < NPIECE_TYPES - 1; ++i) {
-        if (pos.bitboard_of(Us, i)) {
+bool has_non_pawn_material(const chess::Board& board, chess::Color color) {
+    for (chess::PieceType pt = chess::PieceType::KNIGHT; pt <= chess::PieceType::QUEEN; ++pt) {
+        if (board.pieces(pt, color)) {
             return true;
         }
     }
     return false;
 }
 
-template <>
-MoveFlags generate_move_flags<WHITE>(const Position& pos, Square from, Square to) {
-    if (pos.at(to) != NO_PIECE) {
-        if (pos.at(from) == WHITE_PAWN && rank_of(to) == RANK8) {
-            return PROMOTION_CAPTURES;
-        } else {
-            return CAPTURE;
-        }
-    } else if (pos.at(from) == WHITE_PAWN && rank_of(from) == RANK2 && rank_of(to) == RANK4) {
-        return DOUBLE_PUSH;
-    } else if (pos.at(from) == WHITE_KING && from == e1) {
-        if (to == g1) {
-            return OO;
-        } else if (to == c1) {
-            return OOO;
-        }
-    } else if (pos.at(from) == WHITE_PAWN) {
-        if (rank_of(to) == RANK8) {
-            return PROMOTIONS;
-        } else if (file_of(from) != file_of(to) && pos.at(to) == NO_PIECE) {
-            return EN_PASSANT;
-        }
-    }
-    return QUIET;
-}
+// From https://github.com/Disservin/Smallbrain/blob/main/src/see.h#L7-L25
+chess::Bitboard attackers_for_side(const chess::Board& board, chess::Square sq, chess::Color attacker_color, chess::Bitboard occ) {
+    chess::Bitboard attacking_bishops = board.pieces(chess::PieceType::BISHOP, attacker_color);
+    chess::Bitboard attacking_rooks = board.pieces(chess::PieceType::ROOK, attacker_color);
+    chess::Bitboard attacking_queens = board.pieces(chess::PieceType::QUEEN, attacker_color);
+    chess::Bitboard attacking_knights = board.pieces(chess::PieceType::KNIGHT, attacker_color);
+    chess::Bitboard attacking_king = board.pieces(chess::PieceType::KING, attacker_color);
+    chess::Bitboard attacking_pawns = board.pieces(chess::PieceType::PAWN, attacker_color);
 
-template <>
-MoveFlags generate_move_flags<BLACK>(const Position& pos, Square from, Square to) {
-    if (pos.at(to) != NO_PIECE) {
-        if (pos.at(from) == BLACK_PAWN && rank_of(to) == RANK1) {
-            return PROMOTION_CAPTURES;
-        } else {
-            return CAPTURE;
-        }
-    } else if (pos.at(from) == BLACK_PAWN && rank_of(from) == RANK7 && rank_of(to) == RANK5) {
-        return DOUBLE_PUSH;
-    } else if (pos.at(from) == BLACK_KING && from == e8) {
-        if (to == g8) {
-            return OO;
-        } else if (to == c8) {
-            return OOO;
-        }
-    } else if (pos.at(from) == BLACK_PAWN) {
-        if (rank_of(to) == RANK1) {
-            return PROMOTION_CAPTURES;
-        } else if (file_of(from) != file_of(to) && pos.at(to) == NO_PIECE) {
-            return EN_PASSANT;
-        }
-    }
-    return QUIET;
-}
+    chess::Bitboard inter_cardinal_rays = chess::movegen::attacks::bishop(sq, occ);
+    chess::Bitboard cardinal_rays_rays = chess::movegen::attacks::rook(sq, occ);
 
-template <>
-MoveFlags generate_attack_move_flags<WHITE>(const Position& pos, Square from, Square to) {
-    if (pos.at(to) != NO_PIECE) {
-        if (pos.at(from) == WHITE_PAWN && rank_of(to) == RANK8) {
-            return PROMOTION_CAPTURES;
-        } else {
-            return CAPTURE;
-        }
-    } else if (pos.at(from) == WHITE_PAWN && file_of(from) != file_of(to) && pos.at(to) == NO_PIECE) {
-        return EN_PASSANT;
-    }
-    return QUIET;
+    chess::Bitboard attackers = inter_cardinal_rays & (attacking_bishops | attacking_queens);
+    attackers |= cardinal_rays_rays & (attacking_rooks | attacking_queens);
+    attackers |= chess::movegen::attacks::knight(sq) & attacking_knights;
+    attackers |= chess::movegen::attacks::king(sq) & attacking_king;
+    attackers |= chess::movegen::attacks::pawn(~attacker_color, sq) & attacking_pawns;
+    return attackers;
 }
-
-template <>
-MoveFlags generate_attack_move_flags<BLACK>(const Position& pos, Square from, Square to) {
-    if (pos.at(to) != NO_PIECE) {
-        if (pos.at(from) == BLACK_PAWN && rank_of(to) == RANK1) {
-            return PROMOTION_CAPTURES;
-        } else {
-            return CAPTURE;
-        }
-    } else if (pos.at(from) == BLACK_PAWN && file_of(from) != file_of(to) && pos.at(to) == NO_PIECE) {
-        return EN_PASSANT;
-    }
-    return QUIET;
-}
-
-ProphetBoard generate_prophet_board(const Position& pos) {
-    ProphetBoard ret;
-    ret.white = pos.all_pieces<WHITE>();
-    ret.black = pos.all_pieces<BLACK>();
-    ret.pawns = pos.bitboard_of(WHITE_PAWN) | pos.bitboard_of(BLACK_PAWN);
-    ret.knights = pos.bitboard_of(WHITE_KNIGHT) | pos.bitboard_of(BLACK_KNIGHT);
-    ret.bishops = pos.bitboard_of(WHITE_BISHOP) | pos.bitboard_of(BLACK_BISHOP);
-    ret.rooks = pos.bitboard_of(WHITE_ROOK) | pos.bitboard_of(BLACK_ROOK);
-    ret.queens = pos.bitboard_of(WHITE_QUEEN) | pos.bitboard_of(BLACK_QUEEN);
-    ret.kings = pos.bitboard_of(WHITE_KING) | pos.bitboard_of(BLACK_KING);
-    ret.side_to_move = pos.turn();
-    return ret;
-}
-
-template bool has_non_pawn_material<WHITE>(const Position& pos);
-template bool has_non_pawn_material<BLACK>(const Position& pos);

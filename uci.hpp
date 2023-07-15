@@ -1,9 +1,7 @@
 #pragma once
 
-#include "surge/src/position.h"
-#include "surge/src/types.h"
+#include "chess.hpp"
 #include "util.hpp"
-#include <boost/algorithm/string.hpp>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -13,89 +11,14 @@
 
 namespace uci {
     namespace detail {
-        inline unsigned int hash(const std::string& s, int i = 0) {
+        inline unsigned int hash(const std::string& s, size_t i = 0) {
             return !s[i] ? 5381 : (hash(s, i + 1) * 33) ^ s[i];
         }
 
-        constexpr unsigned int hash(const char* s, int i = 0) {
+        constexpr unsigned int hash(const char* s, size_t i = 0) {
             return !s[i] ? 5381 : (hash(s, i + 1) * 33) ^ s[i];
         }
     } // namespace detail
-
-    inline std::string format_move(Move move) {
-        std::ostringstream ss;
-        ss << SQSTR[move.from()];
-
-        Square to_square = move.to();
-        if (move.is_castling()) {
-            if (file_of(move.to()) == AFILE) {
-                to_square = create_square(CFILE, rank_of(move.to()));
-            } else if (file_of(move.to()) == HFILE) {
-                to_square = create_square(GFILE, rank_of(move.to()));
-            }
-        }
-        ss << SQSTR[to_square];
-
-        if (move.is_promotion()) {
-            switch (move.promotion()) {
-            case KNIGHT:
-                ss << 'n';
-                break;
-            case BISHOP:
-                ss << 'b';
-                break;
-            case ROOK:
-                ss << 'r';
-                break;
-            case QUEEN:
-                ss << 'q';
-                break;
-
-            default:
-                throw std::logic_error("Invalid promotion");
-            }
-        }
-        return ss.str();
-    }
-
-    template <Color C>
-    inline Move parse_move(const Position& pos, const std::string& str) {
-        Square from = create_square(File(str[0] - 'a'), Rank(str[1] - '1'));
-        Square to = create_square(File(str[2] - 'a'), Rank(str[3] - '1'));
-        MoveFlags flags = generate_move_flags<C>(pos, from, to);
-        if (flags == PROMOTIONS) {
-            switch (str[4]) {
-            case 'n':
-                flags = PR_KNIGHT;
-                break;
-            case 'b':
-                flags = PR_BISHOP;
-                break;
-            case 'r':
-                flags = PR_ROOK;
-                break;
-            case 'q':
-                flags = PR_QUEEN;
-                break;
-            }
-        } else if (flags == PROMOTION_CAPTURES) {
-            switch (str[4]) {
-            case 'n':
-                flags = PC_KNIGHT;
-                break;
-            case 'b':
-                flags = PC_BISHOP;
-                break;
-            case 'r':
-                flags = PC_ROOK;
-                break;
-            case 'q':
-                flags = PC_QUEEN;
-                break;
-            }
-        }
-        return Move(from, to, flags);
-    }
 
     struct PollResult {
         std::string command;
@@ -105,12 +28,11 @@ namespace uci {
     inline PollResult poll() {
         std::string line;
         std::getline(std::cin, line);
-        boost::trim(line);
+        chess::utils::trim(line);
 
         logger.debug("Got UCI message: " + line);
 
-        std::vector<std::string> line_split;
-        boost::split(line_split, line, isspace);
+        std::vector<std::string> line_split = chess::utils::splitString(line, ' ');
 
         std::string command = line_split[0];
         line_split.erase(line_split.begin());
@@ -126,7 +48,7 @@ namespace uci {
         ss << command;
         if (!args.empty()) {
             ss << ' ';
-            for (size_t i = 0; i < args.size(); i++) {
+            for (size_t i = 0; i < args.size(); ++i) {
                 ss << args[i];
                 if (i != args.size() - 1) {
                     ss << ' ';
@@ -137,11 +59,11 @@ namespace uci {
         std::cout << ss.str() << std::endl;
     }
 
-    inline void bestmove(Move best_move, Move ponder_move = Move()) {
-        if (ponder_move.is_null()) {
-            send_message("bestmove", {format_move(best_move)});
-        } else {
-            send_message("bestmove", {format_move(best_move), "ponder", format_move(ponder_move)});
-        }
+    inline void bestmove(const chess::Move& best_move) {
+        send_message("bestmove", {chess::uci::moveToUci(best_move)});
+    }
+
+    inline void bestmove(const chess::Move& best_move, const chess::Move& ponder_move) {
+        send_message("bestmove", {chess::uci::moveToUci(best_move), "ponder", chess::uci::moveToUci(ponder_move)});
     }
 } // namespace uci

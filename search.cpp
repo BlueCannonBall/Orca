@@ -1,307 +1,336 @@
 #include "search.hpp"
 #include "evaluation.hpp"
-#include "prophet.h"
 #include "util.hpp"
-#include <algorithm>
+#include <boost/range/adaptor/indexed.hpp>
 #include <cmath>
+#include <stdexcept>
 
-template <Color Us>
-int Finder::alpha_beta(int alpha, int beta, int depth) {
-    if (is_stopping()) {
+ADD_INCR_OPERATORS_FOR(chess::Square);
+
+int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, SearchInfo& info, std::function<bool(int)> is_stopping, bool do_null_move, bool do_lmr) {
+    if (is_stopping(info.starting_depth)) {
         return 0;
     }
 
     // Mate distance pruning
-    int mate_value = piece_values[KING] - current_ply();
+    int mate_value = get_value(chess::PieceType::KING) - info.current_ply(board.fullMoveNumber());
     alpha = std::max(alpha, -mate_value);
     beta = std::min(beta, mate_value - 1);
     if (alpha >= beta) {
-        nodes++;
         return alpha;
     }
 
-    bool in_check = search.pos.in_check<Us>();
+    chess::GameResult result;
+    if ((result = board.isGameOver().second) != chess::GameResult::NONE) {
+        switch (result) {
+        case chess::GameResult::WIN:
+        case chess::GameResult::NONE:
+            throw std::runtime_error("Invalid game result");
 
-    // Check extensions
-    if (in_check) {
-        depth++;
+        case chess::GameResult::LOSE:
+            return -mate_value;
+            break;
+
+        case chess::GameResult::DRAW:
+            return 0;
+            break;
+        }
     }
 
-    Move hash_move;
-    TT::iterator entry_it;
-    if ((entry_it = tt->find(search.pos.get_hash())) != tt->end()) {
-        if (entry_it->second.depth >= depth) {
-            int score = entry_it->second.score;
-            if (score >= piece_values[KING] - NHISTORY) {
-                score -= current_ply();
-            } else if (score <= -piece_values[KING] + NHISTORY) {
-                score += current_ply();
-            }
-
-            if (entry_it->second.flag == EXACT) {
-                return score;
-            } else if (entry_it->second.flag == LOWERBOUND) {
-                alpha = std::max(alpha, score);
-            } else if (entry_it->second.flag == UPPERBOUND) {
-                beta = std::min(beta, score);
+    chess::Move hash_move;
+    TTEntry* entry;
+    if ((entry = tt->probe(board.zobrist()))) {
+        if (entry->depth >= depth) {
+            if (entry->flag == TT_FLAG_EXACT) {
+                return entry->score;
+            } else if (entry->flag == TT_FLAG_LOWERBOUND) {
+                alpha = std::max(alpha, entry->score);
+            } else if (entry->flag == TT_FLAG_UPPERBOUND) {
+                beta = std::min(beta, entry->score);
             }
 
             if (alpha >= beta) {
-                return score;
+                return entry->score;
             }
         }
-        hash_move = entry_it->second.best_move;
+        hash_move = entry->best_move;
     }
 
-    nodes++;
-    if (current_ply() > seldepth) {
-        seldepth = current_ply();
+    if (info.current_ply(board.fullMoveNumber()) > info.seldepth) {
+        info.seldepth = info.current_ply(board.fullMoveNumber());
     }
 
     if (depth <= 0) {
-        return quiesce<Us>(alpha, beta, depth - 1);
+        return quiesce(board, alpha, beta, depth - 1, info, is_stopping);
     }
+
+    info.nodes++;
 
     bool is_pv = alpha != beta - 1;
+    bool in_check = board.inCheck();
+    int evaluation = evaluate_nnue(board);
 
-    // Reverse futility pruning
-    if (!is_pv && !in_check && depth <= 8) {
-        int evaluation = evaluate_nnue<Us>(search.pos);
-        if (evaluation - (120 * depth) >= beta) {
-            return evaluation;
+    // Null move pruning
+    if (do_null_move && !is_pv && !in_check && depth >= 2 && evaluation >= beta && has_non_pawn_material(board, board.sideToMove())) {
+        board.makeNullMove();
+        int score = -alpha_beta(board, -beta, -beta + 1, depth - 1 - (3 + (depth - 2) / 4), info, is_stopping, false, false);
+        board.unmakeNullMove();
+
+        if (is_stopping(info.starting_depth)) {
+            return 0;
+        }
+
+        if (score >= beta) {
+            return beta;
         }
     }
 
-    Move moves[218];
-    Move* last_move = search.pos.generate_legals<Us>(moves);
+    chess::Movelist moves;
+    chess::movegen::legalmoves(moves, board);
 
-    int sort_scores[NSQUARES][NSQUARES] = {{0}};
-    for (const Move* move = moves; move != last_move; move++) {
-        if (*move == hash_move) {
-            sort_scores[move->from()][move->to()] = 25000;
+    for (auto& move : moves) {
+        if (entry && move == hash_move) {
+            move.setScore(get_value(chess::PieceType::KING));
             continue;
         }
 
-        if (move->flags() == QUIET) {
-            if (is_killer_move<Us>(*move, current_ply())) {
-                sort_scores[move->from()][move->to()] = 2;
-            } else if (move->is_castling()) {
-                sort_scores[move->from()][move->to()] = 1;
+        int16_t score = 0;
+        bool capture = move.typeOf() == chess::Move::ENPASSANT ||
+                       board.at(move.to()) != chess::Piece::NONE;
+
+        if (!capture) {
+            if (is_killer_move(move, board.sideToMove(), info.current_ply(board.fullMoveNumber()))) {
+                score = 2;
+            } else if (move.typeOf() == chess::Move::CASTLING) {
+                score = 1;
             } else {
-                sort_scores[move->from()][move->to()] = -30000 + get_history_score(*move);
+                score = -30000 + get_history_score(move);
             }
-            continue;
+            goto set_score;
         }
 
-        if (move->is_capture()) {
-            if (move->flags() == EN_PASSANT) {
-                sort_scores[move->from()][move->to()] = 10;
-                continue;
+        if (capture) {
+            if (move.typeOf() == chess::Move::ENPASSANT) {
+                score = 10;
+                goto set_score;
             }
 
-            sort_scores[move->from()][move->to()] += mvv_lva(search.pos, *move);
+            score += mvv_lva(board, move);
 
-            if (see<Us>(search.pos, *move) >= -100) {
-                sort_scores[move->from()][move->to()] += 10;
+            if (move.typeOf() == chess::Move::PROMOTION || see(board, move) >= -100) {
+                score += 10;
             } else {
-                sort_scores[move->from()][move->to()] -= 30001;
+                score -= 30001;
             }
         }
 
-        if (move->is_promotion()) {
-            switch (move->promotion()) {
-            case KNIGHT:
-                sort_scores[move->from()][move->to()] += 5000;
+        if (move.typeOf() == chess::Move::PROMOTION) {
+            switch (move.promotionType()) {
+            case chess::PieceType::KNIGHT:
+                score += 5000;
                 break;
-            case BISHOP:
-                sort_scores[move->from()][move->to()] += 6000;
+            case chess::PieceType::BISHOP:
+                score += 6000;
                 break;
-            case ROOK:
-                sort_scores[move->from()][move->to()] += 7000;
+            case chess::PieceType::ROOK:
+                score += 7000;
                 break;
-            case QUEEN:
-                sort_scores[move->from()][move->to()] += 8000;
+            case chess::PieceType::QUEEN:
+                score += 8000;
                 break;
             default:
                 throw std::logic_error("Invalid promotion");
             }
         }
-    }
-    std::sort(moves, last_move, [&sort_scores](Move a, Move b) {
-        return sort_scores[a.from()][a.to()] > sort_scores[b.from()][b.to()];
-    });
 
-    Move best_move;
-    TTEntryFlag flag = UPPERBOUND;
-    for (const Move* move = moves; move != last_move; move++) {
-        // Late move reduction
-        int reduced_depth = depth;
-        if (move - moves > 4 && depth > 2) {
-            reduced_depth -= 2;
+        // if (board.at(move.to()) == chess::Piece::NONE) {
+        //     if (move.typeOf() == chess::Move::ENPASSANT) {
+        //         score += 150 + mvv_lva(board, move);
+        //     } else {
+        //         if (is_killer_move(move, board.sideToMove(), info.current_ply(board.fullMoveNumber()))) {
+        //             score += info.current_ply(board.fullMoveNumber()) * 15;
+        //         }
+        //         score += get_history_score(move);
+        //     }
+        // } else {
+        //     score += mvv_lva(board, move);
+        //     if (move.typeOf() == chess::Move::PROMOTION || see(board, move) >= -100) {
+        //         score += 150;
+        //     } else {
+        //         score -= 300;
+        //     }
+        // }
+
+    set_score:
+        move.setScore(score);
+    }
+    moves.sort();
+
+    chess::Move best_move(0);
+    int original_alpha = alpha;
+    for (const auto& move : moves | boost::adaptors::indexed()) {
+        bool capture = move.value().typeOf() == chess::Move::ENPASSANT ||
+                       board.at(move.value().to()) != chess::Piece::NONE;
+
+        int score;
+        board.makeMove(move.value());
+
+        // Late move reductions
+        if (do_lmr && depth >= 2 && move.index() > 4 && !capture) {
+            score = -alpha_beta(board, -alpha - 1, -alpha, depth - 1 - std::round(std::log(move.index() - 3) * std::log(depth)), info, is_stopping, true, false);
+            if (score <= alpha) {
+                goto unmake_move;
+            }
         }
 
         // Principle variation search
-        int score;
-        search.pos.play<Us>(*move);
-        if (hash_move.is_null() || *move == hash_move || moves[0] != hash_move) {
-            score = -alpha_beta<~Us>(-beta, -alpha, reduced_depth - 1);
+        if (!entry || move.value() == hash_move || moves[0] != hash_move) {
+            score = -alpha_beta(board, -beta, -alpha, depth - 1, info, is_stopping, true, do_lmr);
         } else {
-            score = -alpha_beta<~Us>(-alpha - 1, -alpha, reduced_depth - 1);
-            if (score > alpha) {
-                score = -alpha_beta<~Us>(-beta, -alpha, reduced_depth - 1);
+            score = -alpha_beta(board, -alpha - 1, -alpha, depth - 1, info, is_stopping, true, do_lmr);
+            if (alpha < score && score < beta) {
+                score = -alpha_beta(board, -beta, -alpha, depth - 1, info, is_stopping, true, do_lmr);
             }
         }
-        search.pos.undo<Us>(*move);
 
-        if (is_stopping()) {
+    unmake_move:
+        board.unmakeMove(move.value());
+
+        if (is_stopping(info.starting_depth)) {
             return 0;
         }
 
+        if (score >= beta) {
+            alpha = beta;
+            best_move = move.value();
+            break;
+        }
+
         if (score > alpha) {
-            best_move = *move;
-            if (score >= beta) {
-                if (move->flags() == QUIET) {
-                    add_killer_move<Us>(*move, current_ply());
-                    update_history_score(*move, depth);
-                }
-                flag = LOWERBOUND;
-                alpha = beta;
-                break;
-            }
-            flag = EXACT;
             alpha = score;
+            if (!capture) {
+                add_killer_move(move.value(), board.sideToMove(), info.current_ply(board.fullMoveNumber()));
+                update_history_score(move.value(), depth);
+            }
+            best_move = move.value();
         }
     }
 
-    if (moves == last_move) {
-        if (in_check) {
-            alpha = -mate_value;
+    if (!is_stopping(info.starting_depth)) {
+        TTEntryFlag flag;
+        if (alpha <= original_alpha) {
+            flag = TT_FLAG_UPPERBOUND;
+        } else if (alpha >= beta) {
+            flag = TT_FLAG_LOWERBOUND;
         } else {
-            alpha = 0;
-        }
-    } else if (best_move.is_null()) {
-        best_move = moves[0];
-    }
-
-    if (!is_stopping()) {
-        int score = alpha;
-        if (score >= piece_values[KING] - NHISTORY) {
-            score += current_ply();
-        } else if (score <= -piece_values[KING] + NHISTORY) {
-            score -= current_ply();
+            flag = TT_FLAG_EXACT;
         }
 
-        if (entry_it != tt->end()) {
-            entry_it->second.score = score;
-            entry_it->second.depth = depth;
-            entry_it->second.best_move = best_move;
-            entry_it->second.flag = flag;
+        if (entry) {
+            if (depth >= entry->depth) {
+                entry->score = alpha;
+                entry->depth = depth;
+                entry->best_move = best_move;
+                entry->flag = flag;
+            }
         } else {
-            tt->emplace(std::make_pair<uint64_t, TTEntry>(search.pos.get_hash(), TTEntry(score, depth, best_move, flag)));
+            tt->insert(TTEntry(board.zobrist(), alpha, depth, best_move, flag));
         }
     }
 
     return alpha;
 }
 
-template <Color Us>
-int Finder::quiesce(int alpha, int beta, int depth) {
-    if (is_stopping()) {
+int SearchAgent::quiesce(nnue::Board& board, int alpha, int beta, int depth, SearchInfo& info, std::function<bool(int)> is_stopping) {
+    if (is_stopping(info.starting_depth)) {
         return 0;
     }
 
-    nodes++;
+    info.nodes++;
 
-    int evaluation = evaluate_nnue<Us>(search.pos);
-
+    int evaluation = evaluate_nnue(board);
     if (evaluation >= beta) {
         return beta;
     } else if (alpha < evaluation) {
         alpha = evaluation;
     }
 
-    Move hash_move;
-    TT::const_iterator entry_it;
-    if ((entry_it = tt->find(search.pos.get_hash())) != tt->end()) {
-        hash_move = entry_it->second.best_move;
+    chess::Movelist moves;
+    chess::movegen::legalmoves<chess::MoveGenType::CAPTURE>(moves, board);
+
+    if (moves.empty()) {
+        return evaluation;
     }
 
-    bool late_endgame = !has_non_pawn_material<Us>(search.pos);
-
-    Move moves[218];
-    Move* last_move = search.pos.generate_legals<Us>(moves);
-
-    if (moves == last_move) {
-        return 0;
+    chess::Move hash_move;
+    if (TTEntry* entry = tt->probe(board.zobrist())) {
+        hash_move = entry->best_move;
     }
 
-    int sort_scores[NSQUARES][NSQUARES] = {{0}};
-    for (const Move* move = moves; move != last_move; move++) {
-        if (*move == hash_move) {
-            sort_scores[move->from()][move->to()] = 25000;
+    for (auto& move : moves) {
+        if (move == hash_move) {
+            move.setScore(get_value(chess::PieceType::KING));
             continue;
         }
 
-        if (move->is_capture()) {
-            if (move->flags() == EN_PASSANT) {
-                sort_scores[move->from()][move->to()] = 10;
-                continue;
+        int16_t score = 0;
+        bool capture = move.typeOf() == chess::Move::ENPASSANT ||
+                       board.at(move.to()) != chess::Piece::NONE;
+
+        if (capture) {
+            if (move.typeOf() == chess::Move::ENPASSANT) {
+                score = 10;
+                goto set_score;
             }
 
-            sort_scores[move->from()][move->to()] += mvv_lva(search.pos, *move);
+            score += mvv_lva(board, move);
 
-            if (see<Us>(search.pos, *move) >= -100) {
-                sort_scores[move->from()][move->to()] += 10;
+            if (move.typeOf() == chess::Move::PROMOTION || see(board, move) >= -100) {
+                score += 10;
             } else {
-                sort_scores[move->from()][move->to()] -= 30001;
+                score -= 30001;
             }
         }
 
-        if (move->is_promotion()) {
-            switch (move->promotion()) {
-            case KNIGHT:
-                sort_scores[move->from()][move->to()] += 5000;
+        if (move.typeOf() == chess::Move::PROMOTION) {
+            switch (move.promotionType()) {
+            case chess::PieceType::KNIGHT:
+                score += 5000;
                 break;
-            case BISHOP:
-                sort_scores[move->from()][move->to()] += 6000;
+            case chess::PieceType::BISHOP:
+                score += 6000;
                 break;
-            case ROOK:
-                sort_scores[move->from()][move->to()] += 7000;
+            case chess::PieceType::ROOK:
+                score += 7000;
                 break;
-            case QUEEN:
-                sort_scores[move->from()][move->to()] += 8000;
+            case chess::PieceType::QUEEN:
+                score += 8000;
                 break;
             default:
                 throw std::logic_error("Invalid promotion");
             }
         }
+
+    set_score:
+        move.setScore(score);
     }
-    std::sort(moves, last_move, [&sort_scores](Move a, Move b) {
-        return sort_scores[a.from()][a.to()] > sort_scores[b.from()][b.to()];
-    });
+    moves.sort();
 
-    for (const Move* move = moves; move != last_move; move++) {
-        if (!move->is_capture() && !move->is_promotion()) {
-            continue;
-        }
+    for (const auto& move : moves) {
+        board.makeMove(move);
+        int score = -quiesce(board, -beta, -alpha, depth - 1, info, is_stopping);
+        board.unmakeMove(move);
 
-        // Delta pruning
-        if (!late_endgame && !move->is_promotion() && move->flags() != EN_PASSANT && evaluation + piece_values[type_of(search.pos.at(move->to()))] + 200 < alpha) {
-            continue;
-        }
-
-        search.pos.play<Us>(*move);
-        int score = -quiesce<~Us>(-beta, -alpha, depth - 1);
-        search.pos.undo<Us>(*move);
-
-        if (is_stopping()) {
+        if (is_stopping(info.starting_depth)) {
             return 0;
         }
 
+        if (score >= beta) {
+            alpha = beta;
+            break;
+        }
+
         if (score > alpha) {
-            if (score >= beta) {
-                return beta;
-            }
             alpha = score;
         }
     }
@@ -309,18 +338,18 @@ int Finder::quiesce(int alpha, int beta, int depth) {
     return alpha;
 }
 
-template <Color C>
-void Finder::add_killer_move(Move move, int ply) {
-    killer_moves[C][ply][2] = killer_moves[C][ply][1];
-    killer_moves[C][ply][1] = killer_moves[C][ply][0];
-    killer_moves[C][ply][0] = move;
+void SearchAgent::add_killer_move(const chess::Move& move, chess::Color color, int ply) {
+    if (!is_killer_move(move, color, ply)) {
+        killer_moves[(uint8_t) color][ply][2] = killer_moves[(uint8_t) color][ply][1];
+        killer_moves[(uint8_t) color][ply][1] = killer_moves[(uint8_t) color][ply][0];
+        killer_moves[(uint8_t) color][ply][0] = move;
+    }
 }
 
-template <Color C>
-bool Finder::is_killer_move(Move move, int ply) const {
+bool SearchAgent::is_killer_move(const chess::Move& move, chess::Color color, int ply) const {
     bool ret = false;
-    for (unsigned char i = 0; i < 3; i++) {
-        if (move == killer_moves[C][ply][i]) {
+    for (size_t i = 0; i < 3; ++i) {
+        if (killer_moves[(uint8_t) color][ply][i] == move) {
             ret = true;
             break;
         }
@@ -328,34 +357,33 @@ bool Finder::is_killer_move(Move move, int ply) const {
     return ret;
 }
 
-int Finder::get_history_score(Move move) const {
+int SearchAgent::get_history_score(const chess::Move& move) const {
     return history_scores[move.from()][move.to()];
 }
 
-void Finder::update_history_score(Move move, int depth) {
+void SearchAgent::update_history_score(const chess::Move& move, int depth) {
     history_scores[move.from()][move.to()] += depth * depth;
-    if (history_scores[move.from()][move.to()] >= 30000) {
-        for (Square sq1 = a1; sq1 < NO_SQUARE; ++sq1) {
-            for (Square sq2 = a1; sq2 < NO_SQUARE; ++sq2) {
-                history_scores[sq1][sq2] >>= 1; // Divide by two
-            }
-        }
-    }
+    // if (history_scores[move.from()][move.to()] >= 30000) {
+    //     for (chess::Square sq1 = chess::SQ_A1; sq1 < chess::NO_SQ; ++sq1) {
+    //         for (chess::Square sq2 = chess::SQ_A1; sq2 < chess::NO_SQ; ++sq2) {
+    //             history_scores[sq1][sq2] >>= 1; // Divide by two
+    //         }
+    //     }
+    // }
 }
 
-std::vector<Move> get_pv(Position pos, const TT* tt) {
-    std::vector<Move> ret;
+std::vector<chess::Move> get_pv(chess::Board board, const TT& tt) {
+    std::vector<chess::Move> ret;
 
-    for (Color side_to_move = pos.turn(); pos.game_ply < NHISTORY; side_to_move = ~side_to_move) {
-        Move moves[218];
-        Move* last_move = DYN_COLOR_CALL(pos.generate_legals, side_to_move, moves);
-        TT::const_iterator entry_it;
-        if ((entry_it = tt->find(pos.get_hash())) != tt->end()) {
-            if (std::find(moves, last_move, entry_it->second.best_move) == last_move) {
+    while (board.fullMoveNumber() < 1024) {
+        chess::Movelist moves;
+        chess::movegen::legalmoves(moves, board);
+        if (const TTEntry* entry = tt.probe(board.zobrist())) {
+            if (std::find(moves.begin(), moves.end(), entry->best_move) == moves.end()) {
                 break;
             } else {
-                ret.push_back(entry_it->second.best_move);
-                DYN_COLOR_CALL(pos.play, side_to_move, entry_it->second.best_move);
+                ret.push_back(entry->best_move);
+                board.makeMove(entry->best_move);
             }
         } else {
             break;
@@ -364,12 +392,3 @@ std::vector<Move> get_pv(Position pos, const TT* tt) {
 
     return ret;
 }
-
-template int Finder::alpha_beta<WHITE>(int alpha, int beta, int depth);
-template int Finder::alpha_beta<BLACK>(int alpha, int beta, int depth);
-
-template int Finder::quiesce<WHITE>(int alpha, int beta, int depth);
-template int Finder::quiesce<BLACK>(int alpha, int beta, int depth);
-
-template void Finder::add_killer_move<WHITE>(Move move, int ply);
-template bool Finder::is_killer_move<WHITE>(Move move, int ply) const;
