@@ -70,6 +70,11 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
     bool in_check = board.inCheck();
     int evaluation = evaluate_nnue(board);
 
+    // Reverse futility pruning
+    if (!is_pv && !in_check && depth <= 8 && evaluation - (120 * depth) >= beta) {
+        return evaluation;
+    }
+
     // Null move pruning
     if (do_null_move && !is_pv && !in_check && depth >= 2 && evaluation >= beta && has_non_pawn_material(board, board.sideToMove())) {
         board.makeNullMove();
@@ -90,7 +95,7 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
 
     for (auto& move : moves) {
         if (entry && move == hash_move) {
-            move.setScore(get_value(chess::PieceType::KING));
+            move.setScore(25000);
             continue;
         }
 
@@ -249,6 +254,7 @@ int SearchAgent::quiesce(nnue::Board& board, int alpha, int beta, int depth, Sea
     info.nodes++;
 
     int evaluation = evaluate_nnue(board);
+
     if (evaluation >= beta) {
         return beta;
     } else if (alpha < evaluation) {
@@ -269,7 +275,7 @@ int SearchAgent::quiesce(nnue::Board& board, int alpha, int beta, int depth, Sea
 
     for (auto& move : moves) {
         if (move == hash_move) {
-            move.setScore(get_value(chess::PieceType::KING));
+            move.setScore(25000);
             continue;
         }
 
