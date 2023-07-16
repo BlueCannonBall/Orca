@@ -86,6 +86,7 @@ struct SearchRequest {
     uint32_t hash_size = 16;
     std::chrono::milliseconds time;
     int target_depth = -1;
+    bool new_game = false;
     bool quit = false;
 };
 

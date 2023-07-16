@@ -75,13 +75,19 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
             return starting_depth > 1 && (std::chrono::steady_clock::now() - start_time > search_req.time || stop.load(boost::memory_order_relaxed));
         };
 
+        if (search_req.new_game) {
+            tt.clear();
+        }
+
         chess::Movelist moves;
         chess::movegen::legalmoves(moves, search_req.board);
         if (moves.empty()) {
             logger.info("Invalid position given: " + search_req.board.getFen());
+            search_req.board.release_prophet();
             continue;
         } else if (moves.size() == 1) {
             uci::bestmove(moves[0]);
+            search_req.board.release_prophet();
             continue;
         }
 
@@ -170,8 +176,8 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
         }
 
         uci::bestmove(best_move);
+        search_req.board.release_prophet();
     }
-    prophet_die_for_sins(prophet);
 }
 
 int main() {
@@ -189,6 +195,7 @@ int main() {
     nnue::Board board(chess::STARTPOS);
     uint8_t multipv = 1;
     uint32_t hash_size = 32;
+    bool new_game = false;
 
     boost::atomic<bool> stop(false);
     boost::fibers::unbuffered_channel<SearchRequest> channel;
@@ -228,6 +235,12 @@ int main() {
                         break;
                     }
                 }
+                break;
+            }
+
+            str_case("ucinewgame"):
+            {
+                new_game = true;
                 break;
             }
 
@@ -345,7 +358,8 @@ int main() {
                     .hash_size = hash_size,
                     .time = search_time,
                     .target_depth = depth,
-                });
+                    .new_game = new_game});
+                new_game = false;
 
                 break;
             }

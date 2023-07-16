@@ -1,4 +1,5 @@
 #include "nnue.hpp"
+#include <utility>
 
 namespace nnue {
     void Board::accept_prophet(Prophet* new_prophet) {
@@ -22,6 +23,10 @@ namespace nnue {
             });
     }
 
+    Prophet* Board::release_prophet() {
+        return std::exchange(prophet, nullptr);
+    }
+
     void Board::placePiece(chess::Piece piece, chess::Square sq) {
         if (prophet) prophet_activate(prophet, (int32_t) chess::utils::typeOfPiece(piece), (int32_t) color(piece), sq);
         chess::Board::placePiece(piece, sq);
@@ -30,5 +35,11 @@ namespace nnue {
     void Board::removePiece(chess::Piece piece, chess::Square sq) {
         if (prophet) prophet_deactivate(prophet, (int32_t) chess::utils::typeOfPiece(piece), (int32_t) color(piece), sq);
         chess::Board::removePiece(piece, sq);
+    }
+
+    Board::~Board() {
+        if (prophet) {
+            prophet_die_for_sins(prophet);
+        }
     }
 } // namespace nnue

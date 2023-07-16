@@ -12,10 +12,13 @@ namespace nnue {
             chess::Board(fen) {}
 
         void accept_prophet(Prophet* new_prophet);
+        Prophet* release_prophet();
 
         inline Prophet* get_prophet() const {
             return prophet;
         }
+
+        ~Board();
 
     protected:
         Prophet* prophet = nullptr;
