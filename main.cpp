@@ -60,7 +60,7 @@ public:
 void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::atomic<bool>& stop) {
     Prophet* prophet = raise_prophet(nullptr);
     SearchRequest search_req;
-    TT tt(32'000'000 / sizeof(TTEntry));
+    TT tt(64'000'000 / sizeof(TTEntry));
     while (channel.pop(search_req) == boost::fibers::channel_op_status::success) {
         if (search_req.quit) {
             prophet_die_for_sins(prophet);
@@ -92,39 +92,88 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
         }
 
         chess::Move best_move;
+        int last_score;
         unsigned long long nodes = moves.size();
         int seldepth = 0;
         int max_ply = search_req.target_depth == -1 ? 1024 : (search_req.board.fullMoveNumber() + search_req.target_depth);
         for (int depth = 1; !is_stopping(depth) && search_req.board.fullMoveNumber() + depth <= max_ply && depth <= 256; ++depth) {
             SearchAgent agent(&tt);
             SearchInfo info(depth, search_req.board.fullMoveNumber());
-            int alpha = -get_value(chess::PieceType::KING);
-            int beta = get_value(chess::PieceType::KING);
             std::vector<ScoredMove> scored_moves;
-            for (const auto& move : moves) {
-                search_req.board.makeMove(move);
-                int score = -agent.search(search_req.board, -beta, -alpha, info, is_stopping);
-                int static_evaluation = -evaluate_nnue(search_req.board);
-                search_req.board.unmakeMove(move);
 
-                if (is_stopping(depth)) {
-                    break;
-                }
+            if (depth == 1 || search_req.multipv > 1) {
+                int alpha = -get_value(chess::PieceType::KING);
+                int beta = get_value(chess::PieceType::KING);
 
-                ++info.nodes;
+                for (const auto& move : moves) {
+                    search_req.board.makeMove(move);
+                    int score = -agent.search(search_req.board, -beta, -alpha, info, is_stopping);
+                    int static_evaluation = -evaluate_nnue(search_req.board);
+                    search_req.board.unmakeMove(move);
 
-                if (search_req.multipv > 1) {
-                    scored_moves.emplace_back(move, score, static_evaluation);
-                } else {
-                    if (score >= beta) {
-                        alpha = beta;
-                        scored_moves = {ScoredMove(move, alpha, static_evaluation)};
+                    if (is_stopping(depth)) {
                         break;
                     }
 
-                    if (score > alpha) {
-                        alpha = score;
-                        scored_moves = {ScoredMove(move, alpha, static_evaluation)};
+                    ++info.nodes;
+
+                    if (search_req.multipv > 1) {
+                        scored_moves.emplace_back(move, score, static_evaluation);
+                    } else {
+                        if (score >= beta) {
+                            alpha = beta;
+                            scored_moves = {ScoredMove(move, alpha, static_evaluation)};
+                            break;
+                        }
+
+                        if (score > alpha) {
+                            alpha = score;
+                            scored_moves = {ScoredMove(move, alpha, static_evaluation)};
+                        }
+                    }
+                }
+            } else {
+                int lower_window_size = std::round((-150.f / (1.f + std::exp(-((depth - 1) / 3.f)))) + 175.f);
+                int upper_window_size = std::round((-150.f / (1.f + std::exp(-((depth - 1) / 3.f)))) + 175.f);
+                for (;;) {
+                    int alpha = last_score - lower_window_size;
+                    int beta = last_score + upper_window_size;
+
+                    int original_alpha = last_score - lower_window_size;
+                    for (const auto& move : moves) {
+                        search_req.board.makeMove(move);
+                        int score = -agent.search(search_req.board, -beta, -alpha, info, is_stopping);
+                        int static_evaluation = -evaluate_nnue(search_req.board);
+                        search_req.board.unmakeMove(move);
+
+                        if (is_stopping(depth)) {
+                            break;
+                        }
+
+                        ++info.nodes;
+
+                        if (score >= beta) {
+                            alpha = beta;
+                            scored_moves = {ScoredMove(move, alpha, static_evaluation)};
+                            continue;
+                        }
+
+                        if (score > alpha) {
+                            alpha = score;
+                            scored_moves = {ScoredMove(move, alpha, static_evaluation)};
+                        }
+                    }
+
+                    if (is_stopping(depth)) {
+                        break;
+                    }
+
+                    if (alpha <= original_alpha) {
+                        lower_window_size <<= 1;
+                    } else if (alpha >= beta) {
+                        upper_window_size <<= 1;
+                    } else {
+                        break;
                     }
                 }
             }
@@ -132,6 +181,7 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
             if (!is_stopping(depth)) {
                 std::sort(scored_moves.begin(), scored_moves.end(), std::greater<ScoredMove>());
                 best_move = scored_moves[0].move;
+                last_score = scored_moves[0].score;
                 nodes += info.nodes;
                 if (seldepth < info.seldepth) {
                     seldepth = info.seldepth;
@@ -194,10 +244,10 @@ int main() {
 
     nnue::Board board(chess::STARTPOS);
     uint8_t multipv = 1;
-    uint32_t hash_size = 32;
+    uint32_t hash_size = 64;
     bool new_game = false;
 
-    boost::atomic<bool> stop(false);
+    boost::atomic<bool> stop = false;
     boost::fibers::unbuffered_channel<SearchRequest> channel;
     boost::thread worker_thread(std::bind(worker, std::ref(channel), std::ref(stop)));
 
@@ -210,7 +260,7 @@ int main() {
                 uci::send_message("id", {"name", "Orca"});
                 uci::send_message("id", {"author", "BlueCannonBall"});
                 uci::send_message("option", {"name", "MultiPV", "type", "spin", "default", "1", "min", "1", "max", "255"});
-                uci::send_message("option", {"name", "Hash", "type", "spin", "default", "32", "min", "1", "max", "65535"});
+                uci::send_message("option", {"name", "Hash", "type", "spin", "default", "64", "min", "1", "max", "65535"});
                 uci::send_message("uciok");
                 break;
             }

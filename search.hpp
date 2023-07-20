@@ -83,7 +83,7 @@ struct SearchRequest {
     nnue::Board board = nnue::Board(chess::STARTPOS);
     uint8_t multipv = 1;
     uint8_t threads = 1;
-    uint32_t hash_size = 16;
+    uint32_t hash_size = 64;
     std::chrono::milliseconds time;
     int target_depth = -1;
     bool new_game = false;
@@ -114,8 +114,8 @@ public:
 
     SearchAgent(TT* tt):
         tt(tt) {
-        memset(killer_moves, 0, sizeof(killer_moves));
-        memset(history_scores, 0, sizeof(history_scores));
+        memset(killer_moves, 0, sizeof killer_moves);
+        memset(history_scores, 0, sizeof history_scores);
     }
 
     int search(nnue::Board& board, int alpha, int beta, SearchInfo& info, std::function<bool(int)> is_stopping) {
