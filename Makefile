@@ -1,5 +1,5 @@
-CXX = g++
-CXXFLAGS = -Wall -std=c++17 -Iprophet-nnue/nnue/include -Ofast -flto -march=native -mtune=native -pthread
+CXX = clang++
+CXXFLAGS = -Wall -std=c++17 -Iprophet-nnue/nnue/include -Ofast -march=native -mtune=native -pthread
 RUSTFLAGS = -C target-cpu=native
 LDLIBS = -lboost_thread -lboost_fiber -ldl -lbz2
 HEADERS = $(shell find . -name "*.h" -o -name "*.hpp")
