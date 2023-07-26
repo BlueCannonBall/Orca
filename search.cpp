@@ -12,13 +12,7 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
         return 0;
     }
 
-    // Mate distance pruning
     int mate_value = get_value(chess::PieceType::KING) - info.current_ply(board.fullMoveNumber());
-    alpha = std::max(alpha, -mate_value);
-    beta = std::min(beta, mate_value - 1);
-    if (alpha >= beta) {
-        return alpha;
-    }
 
     chess::GameResult result;
     if ((result = board.isGameOver().second) != chess::GameResult::NONE) {
@@ -35,6 +29,13 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
             return 0;
             break;
         }
+    }
+
+    // Mate distance pruning
+    alpha = std::max(alpha, -mate_value);
+    beta = std::min(beta, mate_value - 1);
+    if (alpha >= beta) {
+        return alpha;
     }
 
     chess::Move hash_move;
@@ -147,24 +148,6 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
                 throw std::logic_error("Invalid promotion");
             }
         }
-
-        // if (board.at(move.to()) == chess::Piece::NONE) {
-        //     if (move.typeOf() == chess::Move::ENPASSANT) {
-        //         score += 150 + mvv_lva(board, move);
-        //     } else {
-        //         if (is_killer_move(move, board.sideToMove(), info.current_ply(board.fullMoveNumber()))) {
-        //             score += info.current_ply(board.fullMoveNumber()) * 15;
-        //         }
-        //         score += get_history_score(move);
-        //     }
-        // } else {
-        //     score += mvv_lva(board, move);
-        //     if (move.typeOf() == chess::Move::PROMOTION || see(board, move) >= -100) {
-        //         score += 150;
-        //     } else {
-        //         score -= 300;
-        //     }
-        // }
 
     set_score:
         move.setScore(score);

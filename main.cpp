@@ -91,7 +91,7 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
             continue;
         }
 
-        chess::Move best_move;
+        chess::Move best_move(0);
         int last_score;
         unsigned long long nodes = moves.size();
         int seldepth = 0;
