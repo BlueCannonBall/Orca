@@ -38,6 +38,13 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
         return alpha;
     }
 
+    bool in_check = board.inCheck();
+
+    // Check extensions
+    if (in_check) {
+        ++depth;
+    }
+
     chess::Move hash_move;
     TTEntry* entry;
     if ((entry = tt->probe(board.zobrist()))) {
@@ -68,7 +75,6 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
     info.nodes++;
 
     bool is_pv = alpha != beta - 1;
-    bool in_check = board.inCheck();
     int evaluation = evaluate_nnue(board);
 
     // Reverse futility pruning
