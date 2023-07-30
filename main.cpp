@@ -93,7 +93,7 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
 
         chess::Move best_move(0);
         int last_score;
-        unsigned long long nodes = moves.size();
+        unsigned long long nodes = 0;
         int seldepth = 0;
         int max_ply = search_req.target_depth == -1 ? 1024 : (search_req.board.fullMoveNumber() + search_req.target_depth);
         for (int depth = 1; !is_stopping(depth) && search_req.board.fullMoveNumber() + depth <= max_ply && depth <= 256; ++depth) {
@@ -107,6 +107,7 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
 
                 for (const auto& move : moves) {
                     search_req.board.makeMove(move);
+                    ++info.nodes;
                     int score = -agent.search(search_req.board, -beta, -alpha, info, is_stopping);
                     int static_evaluation = -evaluate_nnue(search_req.board);
                     search_req.board.unmakeMove(move);
@@ -114,8 +115,6 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
                     if (is_stopping(depth)) {
                         break;
                     }
-
-                    ++info.nodes;
 
                     if (search_req.multipv > 1) {
                         scored_moves.emplace_back(move, score, static_evaluation);
@@ -142,6 +141,7 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
                     int original_alpha = last_score - lower_window_size;
                     for (const auto& move : moves) {
                         search_req.board.makeMove(move);
+                        ++info.nodes;
                         int score = -agent.search(search_req.board, -beta, -alpha, info, is_stopping);
                         int static_evaluation = -evaluate_nnue(search_req.board);
                         search_req.board.unmakeMove(move);
@@ -149,8 +149,6 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
                         if (is_stopping(depth)) {
                             break;
                         }
-
-                        ++info.nodes;
 
                         if (score >= beta) {
                             alpha = beta;

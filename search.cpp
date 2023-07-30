@@ -72,8 +72,6 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
         return quiesce(board, alpha, beta, depth - 1, info, is_stopping);
     }
 
-    info.nodes++;
-
     bool is_pv = alpha != beta - 1;
     int evaluation = evaluate_nnue(board);
 
@@ -168,6 +166,7 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
 
         int score;
         board.makeMove(move.value());
+        ++info.nodes;
 
         // Late move reductions
         if (do_lmr && depth >= 2 && move.index() > 4 && !capture) {
@@ -240,8 +239,6 @@ int SearchAgent::quiesce(nnue::Board& board, int alpha, int beta, int depth, Sea
         return 0;
     }
 
-    info.nodes++;
-
     int evaluation = evaluate_nnue(board);
 
     if (evaluation >= beta) {
@@ -313,6 +310,7 @@ int SearchAgent::quiesce(nnue::Board& board, int alpha, int beta, int depth, Sea
 
     for (const auto& move : moves) {
         board.makeMove(move);
+        ++info.nodes;
         int score = -quiesce(board, -beta, -alpha, depth - 1, info, is_stopping);
         board.unmakeMove(move);
 
