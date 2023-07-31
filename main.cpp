@@ -382,8 +382,8 @@ int main() {
                             search_time = wtime / 30;
                         }
 
-                        if (search_time < winc + 50ms) {
-                            search_time = winc + 50ms;
+                        if (search_time < winc + 25ms) {
+                            search_time = winc + 25ms;
                         }
                     } else if (board.sideToMove() == chess::Color::BLACK) {
                         if (movetime != 0ms) {
@@ -392,8 +392,8 @@ int main() {
                             search_time = btime / 30;
                         }
 
-                        if (search_time < binc + 50ms) {
-                            search_time = binc + 50ms;
+                        if (search_time < binc + 25ms) {
+                            search_time = binc + 25ms;
                         }
                     } else {
                         throw std::logic_error("Invalid side to move");

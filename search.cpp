@@ -98,66 +98,69 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
     chess::Movelist moves;
     chess::movegen::legalmoves(moves, board);
 
-    for (auto& move : moves) {
-        if (entry && move == hash_move) {
-            move.setScore(25000);
-            continue;
-        }
-
-        int16_t score = 0;
-        bool capture = move.typeOf() == chess::Move::ENPASSANT ||
-                       board.at(move.to()) != chess::Piece::NONE;
-
-        if (!capture) {
-            if (is_killer_move(move, board.sideToMove(), info.current_ply(board.fullMoveNumber()))) {
-                score = 2;
-            } else if (move.typeOf() == chess::Move::CASTLING) {
-                score = 1;
-            } else {
-                score = -30000 + get_history_score(move);
+    if (moves.size() > 1) {
+        for (auto& move : moves) {
+            if (entry && move == hash_move) {
+                move.setScore(25000);
+                continue;
             }
-            goto set_score;
-        }
 
-        if (capture) {
-            if (move.typeOf() == chess::Move::ENPASSANT) {
-                score = 10;
+            int16_t score = 0;
+            bool capture = move.typeOf() == chess::Move::ENPASSANT ||
+                           board.at(move.to()) != chess::Piece::NONE;
+
+            if (!capture) {
+                if (is_killer_move(move, board.sideToMove(), info.current_ply(board.fullMoveNumber()))) {
+                    score = 2;
+                } else if (move.typeOf() == chess::Move::CASTLING) {
+                    score = 1;
+                } else {
+                    score = -30000 + get_history_score(move);
+                }
                 goto set_score;
             }
 
-            score += mvv_lva(board, move);
+            if (capture) {
+                if (move.typeOf() == chess::Move::ENPASSANT) {
+                    score = 10;
+                    goto set_score;
+                }
 
-            if (move.typeOf() == chess::Move::PROMOTION || see(board, move) >= -100) {
-                score += 10;
-            } else {
-                score -= 30001;
+                score += mvv_lva(board, move);
+
+                if (move.typeOf() == chess::Move::PROMOTION || see(board, move) >= -100) {
+                    score += 10;
+                } else {
+                    score -= 30001;
+                }
             }
-        }
 
-        if (move.typeOf() == chess::Move::PROMOTION) {
-            switch (move.promotionType()) {
-            case chess::PieceType::KNIGHT:
-                score += 5000;
-                break;
-            case chess::PieceType::BISHOP:
-                score += 6000;
-                break;
-            case chess::PieceType::ROOK:
-                score += 7000;
-                break;
-            case chess::PieceType::QUEEN:
-                score += 8000;
-                break;
-            default:
-                throw std::logic_error("Invalid promotion");
+            if (move.typeOf() == chess::Move::PROMOTION) {
+                switch (move.promotionType()) {
+                case chess::PieceType::KNIGHT:
+                    score += 5000;
+                    break;
+                case chess::PieceType::BISHOP:
+                    score += 6000;
+                    break;
+                case chess::PieceType::ROOK:
+                    score += 7000;
+                    break;
+                case chess::PieceType::QUEEN:
+                    score += 8000;
+                    break;
+                default:
+                    throw std::logic_error("Invalid promotion");
+                }
             }
-        }
 
-    set_score:
-        move.setScore(score);
+        set_score:
+            move.setScore(score);
+        }
+        moves.sort();
     }
-    moves.sort();
 
+    size_t lmr_index = std::round(6.f / (1.f + std::exp(info.starting_depth / 4.f))) + 3;
     chess::Move best_move(0);
     int original_alpha = alpha;
     for (const auto& move : moves | boost::adaptors::indexed()) {
@@ -169,8 +172,8 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
         ++info.nodes;
 
         // Late move reductions
-        if (do_lmr && depth >= 2 && move.index() > 4 && !capture) {
-            score = -alpha_beta(board, -alpha - 1, -alpha, depth - 1 - std::round(std::log(move.index() - 3) * std::log(depth)), info, is_stopping, true, false);
+        if (do_lmr && moves.size() > 1 && depth >= 2 && move.index() > lmr_index && !capture) {
+            score = -alpha_beta(board, -alpha - 1, -alpha, depth - 1 - std::round(std::log(move.index() - (lmr_index - 1)) * std::log(depth)), info, is_stopping, true, false);
             if (score <= alpha) {
                 goto unmake_move;
             }
@@ -356,13 +359,13 @@ int SearchAgent::get_history_score(const chess::Move& move) const {
 
 void SearchAgent::update_history_score(const chess::Move& move, int depth) {
     history_scores[move.from()][move.to()] += depth * depth;
-    // if (history_scores[move.from()][move.to()] >= 30000) {
-    //     for (chess::Square sq1 = chess::SQ_A1; sq1 < chess::NO_SQ; ++sq1) {
-    //         for (chess::Square sq2 = chess::SQ_A1; sq2 < chess::NO_SQ; ++sq2) {
-    //             history_scores[sq1][sq2] >>= 1; // Divide by two
-    //         }
-    //     }
-    // }
+    if (history_scores[move.from()][move.to()] >= 30000) {
+        for (chess::Square sq1 = chess::SQ_A1; sq1 < chess::NO_SQ; ++sq1) {
+            for (chess::Square sq2 = chess::SQ_A1; sq2 < chess::NO_SQ; ++sq2) {
+                history_scores[sq1][sq2] >>= 1; // Divide by two
+            }
+        }
+    }
 }
 
 std::vector<chess::Move> get_pv(chess::Board board, const TT& tt) {
