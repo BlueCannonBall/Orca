@@ -82,7 +82,7 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
         chess::Movelist moves;
         chess::movegen::legalmoves(moves, search_req.board);
         if (moves.empty()) {
-            logger.info("Invalid position given: " + search_req.board.getFen());
+            logger.error("Invalid position given: " + search_req.board.getFen());
             search_req.board.release_prophet();
             continue;
         } else if (moves.size() == 1) {
@@ -97,6 +97,57 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
         int seldepth = 0;
         int max_ply = search_req.target_depth == -1 ? 1024 : (search_req.board.fullMoveNumber() + search_req.target_depth);
         for (int depth = 1; !is_stopping(depth) && search_req.board.fullMoveNumber() + depth <= max_ply && depth <= 256; ++depth) {
+            for (auto& move : moves) {
+                int16_t score = 0;
+                bool capture;
+
+                if (move == best_move) {
+                    score = 25000;
+                    goto set_score;
+                }
+
+                capture = move.typeOf() == chess::Move::ENPASSANT ||
+                          search_req.board.at(move.to()) != chess::Piece::NONE;
+
+                if (capture) {
+                    if (move.typeOf() == chess::Move::ENPASSANT) {
+                        score = 10;
+                        goto set_score;
+                    }
+
+                    score += mvv_lva(search_req.board, move);
+
+                    if (move.typeOf() == chess::Move::PROMOTION || see(search_req.board, move) >= -100) {
+                        score += 10;
+                    } else {
+                        score -= 30001;
+                    }
+                }
+
+                if (move.typeOf() == chess::Move::PROMOTION) {
+                    switch (move.promotionType()) {
+                    case chess::PieceType::KNIGHT:
+                        score += 5000;
+                        break;
+                    case chess::PieceType::BISHOP:
+                        score += 6000;
+                        break;
+                    case chess::PieceType::ROOK:
+                        score += 7000;
+                        break;
+                    case chess::PieceType::QUEEN:
+                        score += 8000;
+                        break;
+                    default:
+                        throw std::logic_error("Invalid promotion");
+                    }
+                }
+
+            set_score:
+                move.setScore(score);
+            }
+            moves.sort();
+
             SearchAgent agent(&tt);
             SearchInfo info(depth, search_req.board.fullMoveNumber());
             std::vector<ScoredMove> scored_moves;
