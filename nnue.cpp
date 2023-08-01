@@ -2,11 +2,29 @@
 #include <utility>
 
 namespace nnue {
+    void Board::setFen(const std::string& fen) {
+        setFenInternal(fen);
+        if (prophet) {
+            prophet_reset(prophet);
+            prophet_activate_all(prophet,
+                {
+                    .white = us(chess::Color::WHITE),
+                    .black = us(chess::Color::BLACK),
+                    .pawns = pieces(chess::PieceType::PAWN),
+                    .knights = pieces(chess::PieceType::KNIGHT),
+                    .bishops = pieces(chess::PieceType::BISHOP),
+                    .rooks = pieces(chess::PieceType::ROOK),
+                    .queens = pieces(chess::PieceType::QUEEN),
+                    .kings = pieces(chess::PieceType::KING),
+                    .side_to_move = (uint8_t) side_to_move_,
+                });
+        }
+    }
+
     void Board::accept_prophet(Prophet* new_prophet) {
         if (prophet) {
             prophet_die_for_sins(prophet);
         }
-
         prophet = new_prophet;
         prophet_reset(prophet);
         prophet_activate_all(prophet,

@@ -11,6 +11,8 @@ namespace nnue {
         Board(const std::string& fen = chess::STARTPOS):
             chess::Board(fen) {}
 
+        void setFen(const std::string& fen) override;
+
         void accept_prophet(Prophet* new_prophet);
         Prophet* release_prophet();
 
