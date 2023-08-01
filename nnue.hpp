@@ -2,6 +2,7 @@
 
 #include "chess.hpp"
 #include <prophet.h>
+#include <string>
 
 namespace nnue {
     class Board : public chess::Board {
