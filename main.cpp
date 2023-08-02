@@ -237,7 +237,7 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
                 }
 
                 std::chrono::milliseconds time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time);
-                unsigned long long nps = (nodes / std::max(time_elapsed.count(), 1l)) * 1000;
+                unsigned long long nps = (nodes / std::max((long long) time_elapsed.count(), 1ll)) * 1000;
 
                 for (const auto& scored_move : scored_moves | boost::adaptors::indexed(1)) {
                     if (scored_move.index() > search_req.multipv) {
