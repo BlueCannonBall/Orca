@@ -6,6 +6,7 @@
 #include <cstring>
 #include <ctime>
 #include <fstream>
+#include <iostream>
 #include <ostream>
 #include <regex>
 #include <string>
@@ -99,7 +100,7 @@ private:
             logfile << "[" << timef << "] " << message << std::endl;
             logfile.close();
         } else {
-            throw std::runtime_error(strerror(errno));
+            std::cerr << "Logging error: " << strerror(errno) << std::endl;
         }
     }
 
