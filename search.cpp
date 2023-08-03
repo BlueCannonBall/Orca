@@ -23,11 +23,9 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
 
         case chess::GameResult::LOSE:
             return -mate_value;
-            break;
 
         case chess::GameResult::DRAW:
             return 0;
-            break;
         }
     }
 
