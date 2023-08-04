@@ -37,8 +37,7 @@ $(OBJDIR)/nnue.o: nnue.cpp $(HEADERS)
 .PHONY: clean install age
 
 clean:
-	rm -rf $(TARGET) $(OBJDIR)
-	rm -rf prophet-nnue/target
+	rm -rf $(TARGET) $(TARGET)_old $(OBJDIR)
 
 install:
 	cp $(TARGET) $(PREFIX)/bin/
