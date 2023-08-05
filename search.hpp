@@ -83,7 +83,7 @@ struct SearchRequest {
     nnue::Board board = nnue::Board(chess::STARTPOS);
     uint8_t multipv = 1;
     uint8_t threads = 1;
-    uint32_t hash_size = 64;
+    uint16_t hash_size = 64;
     std::chrono::milliseconds time;
     int target_depth = -1;
     bool new_game = false;

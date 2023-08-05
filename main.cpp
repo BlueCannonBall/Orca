@@ -68,7 +68,7 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
         }
 
         stop.store(false, boost::memory_order_relaxed);
-        tt.resize((search_req.hash_size * 1'000'000) / sizeof(TTEntry));
+        tt.resize(search_req.hash_size * 1'000'000 / sizeof(TTEntry));
         search_req.board.accept_prophet(prophet);
         std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
         const auto is_stopping = [start_time, &search_req, &stop](int starting_depth) {
@@ -293,7 +293,7 @@ int main() {
 
     nnue::Board board(chess::STARTPOS);
     uint8_t multipv = 1;
-    uint32_t hash_size = 64;
+    uint16_t hash_size = 64;
     bool new_game = false;
 
     boost::atomic<bool> stop = false;
