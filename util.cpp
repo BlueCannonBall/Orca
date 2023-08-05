@@ -17,7 +17,7 @@ bool has_non_pawn_material(const chess::Board& board, chess::Color color) {
     return false;
 }
 
-// From https://github.com/Disservin/Smallbrain/blob/main/src/see.h#L7-L25
+// From https://github.com/Disservin/Smallbrain/blob/d652eff703ed826b827807025640be3dba8bf4fc/src/see.h#L7-L25
 chess::Bitboard attackers_for_side(const chess::Board& board, chess::Square sq, chess::Color attacker_color, chess::Bitboard occ) {
     chess::Bitboard attacking_bishops = board.pieces(chess::PieceType::BISHOP, attacker_color);
     chess::Bitboard attacking_rooks = board.pieces(chess::PieceType::ROOK, attacker_color);

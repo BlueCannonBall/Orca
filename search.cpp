@@ -19,7 +19,7 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
         switch (result) {
         case chess::GameResult::WIN:
         case chess::GameResult::NONE:
-            throw std::runtime_error("Invalid game result");
+            throw std::logic_error("Invalid game result");
 
         case chess::GameResult::LOSE:
             return -mate_value;
