@@ -246,7 +246,7 @@ int see(const chess::Board& board, const chess::Move& move, bool debug) {
 
     {
         const chess::Square attacker_sq = move.from();
-        const chess::PieceType attacker_pt = chess::utils::typeOfPiece(board.at(attacker_sq));
+        const chess::PieceType attacker_pt = board.at<chess::PieceType>(attacker_sq);
 
         occ &= ~(1ULL << attacker_sq);
         attackers &= ~(1ULL << attacker_sq);
@@ -267,8 +267,8 @@ int see(const chess::Board& board, const chess::Move& move, bool debug) {
     }
 
     if (board.at(move.to()) != chess::Piece::NONE) {
-        ret += get_value(chess::utils::typeOfPiece(board.at(attacked_sq)));
-        if (debug) std::cout << "S1 starts by gaining " << get_value(chess::utils::typeOfPiece(board.at(attacked_sq))) << std::endl;
+        ret += get_value(board.at<chess::PieceType>(attacked_sq));
+        if (debug) std::cout << "S1 starts by gaining " << get_value(board.at<chess::PieceType>(attacked_sq)) << std::endl;
     }
 
     for (chess::Color side_to_move = ~board.sideToMove();; side_to_move = ~side_to_move) {
@@ -359,7 +359,7 @@ int mvv_lva(const chess::Board& board, const chess::Move& move) {
     if (move.typeOf() == chess::Move::ENPASSANT) {
         return scores[(uint8_t) chess::PieceType::PAWN * 6 + (uint8_t) chess::PieceType::PAWN];
     } else if (board.at(move.to()) != chess::Piece::NONE) {
-        return scores[(uint8_t) chess::utils::typeOfPiece(board.at(move.to())) * 6 + (uint8_t) chess::utils::typeOfPiece(board.at(move.from()))];
+        return scores[(uint8_t) board.at<chess::PieceType>(move.to()) * 6 + (uint8_t) board.at<chess::PieceType>(move.from())];
     } else {
         throw std::invalid_argument("Move must be a capture");
     }
