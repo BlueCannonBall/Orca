@@ -16,11 +16,11 @@ constexpr int get_value(chess::PieceType pt) {
     return piece_values[(uint8_t) pt];
 }
 
-int evaluate_basic(const chess::Board& pos);
+int evaluate_basic(const chess::Board& board);
 
-int evaluate_nnue(const nnue::Board& pos);
+int evaluate_nnue(const nnue::Board& board);
 
-int evaluate(const chess::Board& pos, bool debug = false);
+int evaluate(const chess::Board& board, bool debug = false);
 
 int see(const chess::Board& board, const chess::Move& move, bool debug = false);
 
