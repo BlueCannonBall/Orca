@@ -43,7 +43,7 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
         ++depth;
     }
 
-    chess::Move hash_move;
+    chess::Move hash_move(0);
     TTEntry* entry;
     if ((entry = tt->probe(board.zobrist()))) {
         if (entry->depth >= depth) {
@@ -160,7 +160,7 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
         moves.sort();
     }
 
-    size_t lmr_index = std::round(6.f / (1.f + std::exp(info.starting_depth / 4.f))) + 3;
+    long long lmr_index = std::round(6.f / (1.f + std::exp(info.starting_depth / 4.f))) + 3;
     chess::Move best_move(0);
     int original_alpha = alpha;
     for (const auto& move : moves | boost::adaptors::indexed()) {
@@ -257,7 +257,7 @@ int SearchAgent::quiesce(nnue::Board& board, int alpha, int beta, int depth, Sea
         return evaluation;
     }
 
-    chess::Move hash_move;
+    chess::Move hash_move(0);
     if (TTEntry* entry = tt->probe(board.zobrist())) {
         hash_move = entry->best_move;
     }

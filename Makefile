@@ -1,4 +1,4 @@
-CXX = clang++
+CXX = g++
 CXXFLAGS = -Wall -std=c++17 -Iprophet-nnue/nnue/include -Ofast -march=native -mtune=native -pthread
 RUSTFLAGS = -C target-cpu=native
 LDLIBS = -lboost_thread -lboost_fiber -ldl -lbz2
