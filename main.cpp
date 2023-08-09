@@ -237,7 +237,7 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
                 }
 
                 std::chrono::milliseconds time_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time);
-                unsigned long long nps = (nodes / std::max((long long) time_elapsed.count(), 1ll)) * 1000;
+                unsigned long long nps = (nodes / std::max<long long>(time_elapsed.count(), 1ll)) * 1000;
 
                 for (const auto& scored_move : scored_moves | boost::adaptors::indexed(1)) {
                     if (scored_move.index() > search_req.multipv) {
@@ -248,7 +248,7 @@ void worker(boost::fibers::unbuffered_channel<SearchRequest>& channel, boost::at
                     std::vector<chess::Move> pv = get_pv(search_req.board, tt);
                     search_req.board.unmakeMove(scored_move.value());
                     pv.insert(pv.begin(), scored_move.value());
-                    pv.resize(std::min((int) pv.size(), seldepth));
+                    pv.resize(std::min<int>(pv.size(), seldepth));
 
                     std::vector<std::string> pv_strings;
                     std::transform(pv.cbegin(), pv.cend(), std::back_inserter(pv_strings), [](const chess::Move& move) {
