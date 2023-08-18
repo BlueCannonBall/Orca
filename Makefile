@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -Wall -std=c++17 -Iprophet-nnue/nnue/include -Ofast -march=native -mtune=native -pthread
 RUSTFLAGS = -C target-cpu=native
-LDLIBS = -lboost_thread -lboost_fiber -ldl -lbz2
+LDLIBS = -lboost_thread-mt -lboost_fiber-mt -ldl -lbz2
 HEADERS = $(shell find . -name "*.h" -o -name "*.hpp")
 OBJDIR = obj
 OBJS = $(OBJDIR)/main.o $(OBJDIR)/util.o $(OBJDIR)/evaluation.o $(OBJDIR)/search.o $(OBJDIR)/nnue.o
@@ -13,7 +13,7 @@ $(TARGET): $(OBJS) prophet-nnue/target/release/libprophet.a
 
 $(OBJDIR)/main.o: main.cpp $(HEADERS)
 	mkdir -p $(OBJDIR)
-	$(CXX) -c $< $(CXXFLAGS) -DORCA_TIMESTAMP=\"$(shell date --iso=seconds)\" "-DORCA_COMPILER=\"$(CXX) $(shell $(CXX) -dumpversion)\"" -o $@
+	$(CXX) -c $< $(CXXFLAGS) "-DORCA_TIMESTAMP=\"$(shell date -u)\"" "-DORCA_COMPILER=\"$(CXX) $(shell $(CXX) -dumpversion)\"" -o $@
 
 prophet-nnue/target/release/libprophet.a: prophet-nnue/nnue/Cargo.toml $(shell find prophet-nnue/nnue/src -name "*.rs") prophet-nnue/nnue/nnue.npz
 	cd prophet-nnue/nnue && RUSTFLAGS="$(RUSTFLAGS)" cargo build --release

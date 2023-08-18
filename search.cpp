@@ -163,7 +163,7 @@ int SearchAgent::alpha_beta(nnue::Board& board, int alpha, int beta, int depth, 
     long long lmr_index = std::round(6.f / (1.f + std::exp(info.starting_depth / 4.f))) + 3;
     chess::Move best_move(0);
     int original_alpha = alpha;
-    for (const auto& move : moves | boost::adaptors::indexed()) {
+    for (auto move : moves | boost::adaptors::indexed()) {
         bool capture = move.value().typeOf() == chess::Move::ENPASSANT ||
                        board.at(move.value().to()) != chess::Piece::NONE;
 
