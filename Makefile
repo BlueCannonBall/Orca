@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -Wall -std=c++17 -Iprophet-nnue/nnue/include -Ofast -march=native -mtune=native -pthread
 RUSTFLAGS = -C target-cpu=native
-LDLIBS = -lboost_thread-mt -lboost_fiber-mt -ldl -lbz2
+LDLIBS = -lboost_thread -lboost_fiber -ldl -lbz2
 HEADERS = $(shell find . -name "*.h" -o -name "*.hpp")
 OBJDIR = obj
 OBJS = $(OBJDIR)/main.o $(OBJDIR)/util.o $(OBJDIR)/evaluation.o $(OBJDIR)/search.o $(OBJDIR)/nnue.o
