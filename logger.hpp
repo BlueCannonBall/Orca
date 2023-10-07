@@ -75,7 +75,7 @@ inline LogLevel& operator^=(LogLevel& lhs, LogLevel rhs) {
 
 class Logger {
 private:
-    boost::mutex mtx;
+    boost::mutex mutex;
 
     static std::string filter(const std::string& str) {
         const static std::regex ansi_escape_code_re(R"(\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))");
@@ -93,7 +93,7 @@ private:
         char timef[TIMEBUF_SIZE];
         strftime(timef, TIMEBUF_SIZE, "%c", timeinfo);
 
-        boost::unique_lock<boost::mutex> lock(this->mtx);
+        boost::unique_lock<boost::mutex> lock(this->mutex);
 
         std::ofstream logfile(this->logfile_name, std::ios::app);
         if (logfile.is_open()) {
